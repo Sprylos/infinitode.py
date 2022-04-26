@@ -12,7 +12,7 @@ setuptools.setup(
     description='A python wrapper for the Infinitode 2 API.',
     long_description=readme,
     long_description_content_type='text/markdown',
-    version='1.2.0',
+    version='1.0.0',
     packages=['infinitode'],
     package_data={'infinitode': ['py.typed']},
     license='MIT',
