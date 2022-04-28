@@ -12,6 +12,7 @@ from typing import (
 # local
 from .score import Score
 from .errors import MissingSession
+from .utils import MISSING
 
 if TYPE_CHECKING:
     from .core import Session
@@ -71,8 +72,8 @@ class Player:
         self._replays = replays
         self._issues = issues
         self._created_at = created_at
-        self.__daily_quest: Optional[Score] = None
-        self.__skill_point: Optional[Score] = None
+        self.__daily_quest: Optional[Score] = MISSING
+        self.__skill_point: Optional[Score] = MISSING
 
     @property
     def playerid(self) -> str:
@@ -151,24 +152,34 @@ class Player:
                 rank=0, score=0, total=0, top='-%')
             return self._levels[mapname]
 
-    async def daily_quest(self, session: Optional[Session] = None) -> Score:
-        """Returns the player's current DQ score, and fetches it first if it wasn't already."""
-        if self.__daily_quest is None:
+    async def daily_quest(self, session: Optional[Session] = None) -> Optional[Score]:
+        """
+        Fetches the player's Daily Quest score if it wasn't fetched already.
+        Returns None if the player is not ranked.
+        """
+        if not self.__daily_quest:
             if session is None:
-                raise MissingSession(
-                    'You need to provide a Session to fetch the daily quest score.')
+                if self.__daily_quest is MISSING:
+                    raise MissingSession(
+                        'You need to provide a Session to fetch the daily quest score.')
+                else:
+                    return self.__daily_quest
             self.__daily_quest = (await session.daily_quest_leaderboards(playerid=self._playerid)).player
-            assert self.__daily_quest is not None
         return self.__daily_quest
 
-    async def skill_point(self, session: Optional[Session] = None) -> Score:
-        """Returns the player's current SP score, and fetches it first if it wasn't already."""
-        if self.__skill_point is None:
+    async def skill_point(self, session: Optional[Session] = None) -> Optional[Score]:
+        """
+        Fetches the player's Skill Point score if it wasn't fetched already.
+        Returns None if the player is not ranked.
+        """
+        if not self.__skill_point:
             if session is None:
-                raise MissingSession(
-                    'You need to provide a Session to fetch the skill point score.')
+                if self.__skill_point is MISSING:
+                    raise MissingSession(
+                        'You need to provide a Session to fetch the skill point score.')
+                else:
+                    return self.__skill_point
             self.__skill_point = (await session.skill_point_leaderboard(playerid=self._playerid)).player
-            assert self.__skill_point is not None
         return self.__skill_point
 
     # magic methods
