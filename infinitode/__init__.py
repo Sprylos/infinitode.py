@@ -11,6 +11,7 @@ from .leaderboard import *
 from .player import *
 from .score import *
 from . import errors as errors
+from . import utils as utils
 
 
 __author__ = "Sprylos"
