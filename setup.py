@@ -1,5 +1,10 @@
 import setuptools
+import re
 
+version = ''
+with open('infinitode/__init__.py') as f:
+    version = re.search(
+        r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]', f.read(), re.MULTILINE).group(1)  # type: ignore
 
 readme = ''
 with open('README.md') as f:
@@ -12,7 +17,7 @@ setuptools.setup(
     description='A python wrapper for the Infinitode 2 API.',
     long_description=readme,
     long_description_content_type='text/markdown',
-    version='1.0.0',
+    version=version,
     packages=['infinitode'],
     package_data={'infinitode': ['py.typed']},
     license='MIT',

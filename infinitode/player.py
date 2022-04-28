@@ -148,7 +148,7 @@ class Player:
         """Returns the player's daily quest score, or raises InfinitodeError if it wasn't fetched yet."""
         if self._daily_quest is MISSING:
             raise InfinitodeError(
-                'This score has not been fetched yet. Use ~.fetch_daily_quest first')
+                'This score has not been fetched yet. Use ~.fetch_daily_quest first.')
         else:
             return self._daily_quest
 
@@ -157,7 +157,7 @@ class Player:
         """Returns the player's daily quest score, or raises InfinitodeError if it wasn't fetched yet."""
         if self._skill_point is MISSING:
             raise InfinitodeError(
-                'This score has not been fetched yet. Use ~.fetch_skill_point first')
+                'This score has not been fetched yet. Use ~.fetch_skill_point first.')
         else:
             return self._skill_point
 
