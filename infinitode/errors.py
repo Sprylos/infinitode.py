@@ -4,7 +4,6 @@ __all__ = (
     'InfinitodeError',
     'APIError',
     'BadArgument',
-    'MissingSession',
 )
 
 
@@ -21,7 +20,3 @@ class APIError(InfinitodeError):
 class BadArgument(InfinitodeError):
     '''Error raised when an invalid argument is passed.'''
     pass
-
-
-class MissingSession(InfinitodeError):
-    '''Error raised when a session is required but not given.'''

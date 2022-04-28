@@ -11,7 +11,7 @@ from typing import (
 
 # local
 from .score import Score
-from .errors import MissingSession
+from .errors import InfinitodeError
 from .utils import MISSING
 
 if TYPE_CHECKING:
@@ -38,8 +38,8 @@ class Player:
         '_issues',
         '_created_at',
 
-        '__daily_quest',
-        '__skill_point'
+        '_daily_quest',
+        '_skill_point'
     )
 
     def __init__(
@@ -72,8 +72,8 @@ class Player:
         self._replays = replays
         self._issues = issues
         self._created_at = created_at
-        self.__daily_quest: Optional[Score] = MISSING
-        self.__skill_point: Optional[Score] = MISSING
+        self._daily_quest: Optional[Score] = MISSING
+        self._skill_point: Optional[Score] = MISSING
 
     @property
     def playerid(self) -> str:
@@ -140,7 +140,26 @@ class Player:
 
     @property
     def avatar_link(self):
+        """The link to the player's avatar. Invalid URL if the user doesn't have a pfp."""
         return f'https://infinitode.prineside.com/img/avatars/{self._playerid}-128.png'
+
+    @property
+    def daily_quest(self):
+        """Returns the player's daily quest score, or raises InfinitodeError if it wasn't fetched yet."""
+        if self._daily_quest is MISSING:
+            raise InfinitodeError(
+                'This score has not been fetched yet. Use ~.fetch_daily_quest first')
+        else:
+            return self._daily_quest
+
+    @property
+    def skill_point(self):
+        """Returns the player's daily quest score, or raises InfinitodeError if it wasn't fetched yet."""
+        if self._skill_point is MISSING:
+            raise InfinitodeError(
+                'This score has not been fetched yet. Use ~.fetch_skill_point first')
+        else:
+            return self._skill_point
 
     def score(self, mapname: str) -> Score:
         """Returns the player's score on the given map."""
@@ -152,35 +171,35 @@ class Player:
                 rank=0, score=0, total=0, top='-%')
             return self._levels[mapname]
 
-    async def daily_quest(self, session: Optional[Session] = None) -> Optional[Score]:
+    async def fetch_daily_quest(self, session: Optional[Session] = None) -> Optional[Score]:
         """
         Fetches the player's Daily Quest score if it wasn't fetched already.
         Returns None if the player is not ranked.
         """
-        if not self.__daily_quest:
+        if not self._daily_quest:
             if session is None:
-                if self.__daily_quest is MISSING:
-                    raise MissingSession(
+                if self._daily_quest is MISSING:
+                    raise InfinitodeError(
                         'You need to provide a Session to fetch the daily quest score.')
                 else:
-                    return self.__daily_quest
-            self.__daily_quest = (await session.daily_quest_leaderboards(playerid=self._playerid)).player
-        return self.__daily_quest
+                    return self._daily_quest
+            self._daily_quest = (await session.daily_quest_leaderboards(playerid=self._playerid)).player
+        return self._daily_quest
 
-    async def skill_point(self, session: Optional[Session] = None) -> Optional[Score]:
+    async def fetch_skill_point(self, session: Optional[Session] = None) -> Optional[Score]:
         """
         Fetches the player's Skill Point score if it wasn't fetched already.
         Returns None if the player is not ranked.
         """
-        if not self.__skill_point:
+        if not self._skill_point:
             if session is None:
-                if self.__skill_point is MISSING:
-                    raise MissingSession(
+                if self._skill_point is MISSING:
+                    raise InfinitodeError(
                         'You need to provide a Session to fetch the skill point score.')
                 else:
-                    return self.__skill_point
-            self.__skill_point = (await session.skill_point_leaderboard(playerid=self._playerid)).player
-        return self.__skill_point
+                    return self._skill_point
+            self._skill_point = (await session.skill_point_leaderboard(playerid=self._playerid)).player
+        return self._skill_point
 
     # magic methods
 
