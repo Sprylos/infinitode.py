@@ -125,3 +125,25 @@ async def main():
 # In case you get a runtime error here, ignore it, that's Windows' shit.
 asyncio.run(main())
 ```
+
+## Logging
+
+---
+
+```python
+import infinitode
+import asyncio
+import logging
+
+# setup logger
+# INFO will log everytime a request is made
+# DEBUG will log the server's response aswell
+logging.basicConfig(level=logging.INFO)
+
+
+async def main():
+    async with infinitode.Session() as API:
+        await API.leaderboards('6.3')  # just an example
+
+asyncio.run(main())
+```

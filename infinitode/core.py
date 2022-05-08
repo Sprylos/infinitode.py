@@ -3,6 +3,7 @@ from __future__ import annotations
 # std
 import re
 import time
+import logging
 import datetime
 from typing import (
     Any,
@@ -23,6 +24,8 @@ from .score import Score
 
 
 __all__ = ('Session',)
+
+_log = logging.getLogger(__name__)
 
 ID_REGEX = re.compile(r'U-([A-Z0-9]{4}-){2}[A-Z0-9]{6}')
 LEVELS = (
@@ -78,6 +81,7 @@ class Session:
     async def _post(self, arg: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         '''Internal post method to communicate with Rainy's API'''
         url = f'https://infinitode.prineside.com/?m=api&a={arg}&apiv=1&g=com.prineside.tdi2&v=282'
+        _log.info('Sending POST request %s with data %s', arg, data)
         async with self._session.post(url, data=data) as r:
             try:
                 r.raise_for_status()
@@ -85,6 +89,7 @@ class Session:
                 raise APIError("Something went wrong. Try again later")
 
             payload: Dict[str, Any] = await r.json()
+            _log.debug('Response to POST request %s: %s', arg, payload)
 
             if payload['status'] == 'success':
                 return payload
@@ -170,8 +175,8 @@ class Session:
                 datetime.datetime.strptime(date, '%Y-%m-%d')
             except ValueError:
                 if warning == True:
-                    print(
-                        f'Warning: Invalid date was passed into daily_quest_leaderboards (Use YYYY-MM-DD format): {date}')
+                    _log.warning(
+                        'Invalid date in daily_quest_leaderboards (Use YYYY-MM-DD format): %s', date)
                 date = datetime.datetime.utcnow().strftime('%Y-%m-%d')
         if not playerid and (time.time() < self._cooldown['DailyQuestLeaderboards'].get(date, 0) + 60):
             return self._DailyQuestLeaderboards[date]
@@ -191,7 +196,9 @@ class Session:
         """
         if time.time() < self._cooldown['seasonal'] + 60:
             return self._seasonal
-        r = await self._session.get(url='https://infinitode.prineside.com/xdx/?url=seasonal_leaderboard')
+        url = 'https://infinitode.prineside.com/xdx/?url=seasonal_leaderboard'
+        _log.info('Sending GET request to %s', url)
+        r = await self._session.get(url=url)
         try:
             r.raise_for_status()
         except aiohttp.ClientResponseError:
@@ -223,6 +230,7 @@ class Session:
         A valid playerid needs to be specified.
         """
         url = f'https://infinitode.prineside.com/xdx/index.php?url=profile/view&id={playerid}'
+        _log.info('Sending GET request to %s', url)
         r = await self._session.get(url=url)
         try:
             r.raise_for_status()
