@@ -203,7 +203,7 @@ class Session:
             r.raise_for_status()
         except aiohttp.ClientResponseError:
             raise APIError('Bad Gateway.')
-        seasonal = bs4.BeautifulSoup(await r.text(), 'lxml')
+        seasonal = bs4.BeautifulSoup(await r.text(), features='lxml')
         season = int(seasonal.select_one('label[i18n="season_formatted"]')['i18nf'].replace('["', '').replace('"]', ''))  # type: ignore # nopep8
         player_count = int(seasonal.select('label[i18n="player_count_formatted"]')[  # type: ignore
             0]['i18nf'].replace('["', '').replace('"]', '').replace(',', ''))  # type: ignore
@@ -236,8 +236,7 @@ class Session:
             r.raise_for_status()
         except aiohttp.ClientResponseError:
             raise APIError('Bad Gateway.')
-        text = await r.text()
-        data = bs4.BeautifulSoup(text, 'lxml')
+        data = bs4.BeautifulSoup(await r.text(), features='lxml')
         t: Dict[str, Any] = {}
         t['playerid'] = playerid
         t['nickname'] = data.select_one('label:not([i18n])').text  # type: ignore # this should never fail # nopep8
@@ -263,7 +262,10 @@ class Session:
             if 'Level:' in x:
                 t['level'] = int(x.split('>')[3].split('<')[0])
                 break
-        xp_data = data.select_one('div[width="330"][height="64"]').select_one('label').text.split(' / ')  # type: ignore # nopep8
+        xp_data = data.select_one('div[width="330"][height="64"]')
+        if xp_data is None:
+            raise BadArgument('Invalid playerid: ' + playerid)
+        xp_data = xp_data.select_one('label').text.split(' / ')  # type: ignore
         t['xp'] = int(xp_data[0])
         t['xp_max'] = int(xp_data[1])
         t['levels'] = {}
