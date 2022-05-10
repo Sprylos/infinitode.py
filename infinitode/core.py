@@ -180,6 +180,8 @@ class Session:
                 date = datetime.datetime.utcnow().strftime('%Y-%m-%d')
         if not playerid and (time.time() < self._cooldown['DailyQuestLeaderboards'].get(date, 0) + 60):
             return self._DailyQuestLeaderboards[date]
+        if playerid is not None:
+            self._kwarg_check(playerid=playerid)
         payload = await self._post('getDailyQuestLeaderboards', data={'date': date, 'playerid': playerid})
         lb = Leaderboard.from_payload(
             'daily_quest_leaderboards', 'DQ', 'score', 'NORMAL', playerid, payload, date=date)
@@ -229,6 +231,7 @@ class Session:
         Retrieves the Player.
         A valid playerid needs to be specified.
         """
+        self._kwarg_check(playerid=playerid)
         url = f'https://infinitode.prineside.com/xdx/index.php?url=profile/view&id={playerid}'
         _log.info('Sending GET request to %s', url)
         r = await self._session.get(url=url)
