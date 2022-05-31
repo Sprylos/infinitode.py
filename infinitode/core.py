@@ -297,8 +297,12 @@ class Session:
                     col: str = x.select('img')[-1]['color']  # type: ignore # nopep8
                     t['badges'][ico] = (rar, col)
         labels = data.select('table[width="800"][align="center"]')[-1].select('label')  # type: ignore # nopep8
-        t['replays'] = int(labels[-3].string.split(" ")[3])  # type: ignore
-        t['issues'] = int(labels[-2].string.split(" ")[0][3:])  # type: ignore
+        try:
+            t['replays'] = int(labels[-3].string.split(" ")[3])  # type: ignore
+            t['issues'] = int(labels[-2].string.split(" ")[0][3:])  # type: ignore # nopep8
+        except IndexError:
+            t['replays'] = 0
+            t['issues'] = 0
         sp = list(labels[-1].string.split("ned ")[1].split(" "))  # type: ignore # nopep8
         day = sp[0][:-2] if len(sp[0][:2]) == 2 else "0" + sp[0][:2]
         t['created_at'] = datetime.datetime.strptime(
