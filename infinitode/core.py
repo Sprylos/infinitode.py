@@ -3,6 +3,7 @@ from __future__ import annotations
 # std
 import re
 import time
+import asyncio
 import logging
 import datetime
 from typing import (
@@ -20,6 +21,7 @@ import bs4
 from .errors import APIError, BadArgument
 from .leaderboard import Leaderboard
 from .player import Player
+from .utils import try_int
 from .score import Score
 
 
@@ -226,46 +228,31 @@ class Session:
         self._cooldown['seasonal'] = time.time()
         return lb
 
-    async def player(self, playerid: str) -> Player:
-        """
-        Retrieves the Player.
-        A valid playerid needs to be specified.
-        """
-        self._kwarg_check(playerid=playerid)
-        url = f'https://infinitode.prineside.com/xdx/index.php?url=profile/view&id={playerid}'
-        _log.info('Sending GET request to %s', url)
-        r = await self._session.get(url=url)
-        try:
-            r.raise_for_status()
-        except aiohttp.ClientResponseError:
-            raise APIError('Bad Gateway.')
-        data = bs4.BeautifulSoup(await r.text(), features='lxml')
+    def _parse_player(self, content: str, playerid: str) -> Player:
+        data = bs4.BeautifulSoup(content, features='lxml')
         t: Dict[str, Any] = {}
         t['playerid'] = playerid
         t['nickname'] = data.select_one('label:not([i18n])').text  # type: ignore # this should never fail # nopep8
-        if (totals := data.select_one('div[width="522"][height="128"][pad-top="10"][pad-bottom="10"][align="center"]')) is not None:  # type: ignore # nopep8
-            totals = totals.select('label')  # type: ignore # nopep8
-            try:
-                t['total_score'] = int(totals[1].text.replace(',', ''))
-            except (KeyError, ValueError):
-                t['total_score'] = 0
-            try:
-                t['total_rank'] = int(totals[2].text.replace(',', ''))
-            except (KeyError, ValueError):
-                t['total_rank'] = 0
-            try:
-                t['total_top'] = totals[3].text.replace('- Top ', '')
-            except (KeyError, ValueError):
-                t['total_top'] = 0
-        else:
+        totals = data.select_one('div[width="522"][height="128"][pad-top="10"][pad-bottom="10"][align="center"]')  # type: ignore # nopep8
+        if totals is None:
             t.update({'total_score': 0, 'total_rank': 0, 'total_top': 0})
+        else:
+            totals = totals.select('label')  # type: ignore # nopep8
+            if len(totals) >= 4:
+                t['total_score'] = try_int(totals[1].text.replace(',', ''))
+                t['total_rank'] = try_int(totals[2].text.replace(',', ''))
+                t['total_top'] = totals[3].text.replace('- Top ', '')
+            else:
+                t.update({'total_score': 0, 'total_rank': 0, 'total_top': 0})
         comments = data.findAll(
             text=lambda text: isinstance(text, bs4.Comment))
         for x in comments:
             if 'Level:' in x:
                 t['level'] = int(x.split('>')[3].split('<')[0])
                 break
-        xp_data = data.select_one('div[width="330"][height="64"]')
+        else:
+            t['level'] = 0
+        xp_data = data.select_one('div[width="330"][height="64"]')  # type: ignore # nopep8
         if xp_data is None:
             raise BadArgument('Invalid playerid: ' + playerid)
         xp_data = xp_data.select_one('label').text.split(' / ')  # type: ignore
@@ -297,15 +284,32 @@ class Session:
                     col: str = x.select('img')[-1]['color']  # type: ignore # nopep8
                     t['badges'][ico] = (rar, col)
         labels = data.select('table[width="800"][align="center"]')[-1].select('label')  # type: ignore # nopep8
-        try:
-            t['replays'] = int(labels[-3].string.split(" ")[3])  # type: ignore
-            t['issues'] = int(labels[-2].string.split(" ")[0][3:])  # type: ignore # nopep8
-        except IndexError:
-            t['replays'] = 0
-            t['issues'] = 0
+        replays = labels[-3].string.split(" ")  # type: ignore
+        t['replays'] = 0 if len(replays) != 4 else int(replays[3])
+        issues = labels[-2].string.split(" ")  # type: ignore
+        t['issues'] = 0 if len(issues) != 6 else int(issues[0][3:])
         sp = list(labels[-1].string.split("ned ")[1].split(" "))  # type: ignore # nopep8
         day = sp[0][:-2] if len(sp[0][:2]) == 2 else "0" + sp[0][:2]
         t['created_at'] = datetime.datetime.strptime(
             day + " " + sp[-2] + " " + sp[-1], "%d %B %Y").strftime('%Y-%m-%d')
 
         return Player(**t)
+
+    async def player(self, playerid: str) -> Player:
+        """
+        Retrieves the Player.
+        A valid playerid needs to be specified.
+        """
+        self._kwarg_check(playerid=playerid)
+        url = f'https://infinitode.prineside.com/xdx/index.php?url=profile/view&id={playerid}'
+        _log.info('Sending GET request to %s', url)
+        r = await self._session.get(url=url)
+        try:
+            r.raise_for_status()
+        except aiohttp.ClientResponseError:
+            raise APIError('Bad Gateway.')
+        loop = asyncio.get_event_loop()
+        try:
+            return await loop.run_in_executor(None, self._parse_player, await r.text(), playerid)
+        except Exception as exc:
+            raise BadArgument('Invalid playerid: ' + playerid) from exc
