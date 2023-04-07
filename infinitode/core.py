@@ -36,7 +36,7 @@ LEVELS = (
     '3.1', '3.2', '3.3', '3.4', '3.5', '3.6', '3.7', '3.8', '3.b1',
     '4.1', '4.2', '4.3', '4.4', '4.5', '4.6', '4.7', '4.8', '4.b1',
     '5.1', '5.2', '5.3', '5.4', '5.5', '5.6', '5.7', '5.8', '5.b1', '5.b2',
-    '6.1', '6.2', '6.3', '6.4', 'rumble', 'dev', 'zecred',
+    '6.1', '6.2', '6.3', '6.4', '6.5', 'rumble', 'dev', 'zecred',
     'DQ1', 'DQ3', 'DQ4', 'DQ5', 'DQ7', 'DQ8', 'DQ9', 'DQ10', 'DQ11', 'DQ12',
 )
 
@@ -243,7 +243,7 @@ class Session:
                 t['total_rank'] = try_int(totals[2].text.replace(',', ''))
                 t['total_top'] = totals[3].text.replace('- Top ', '')
             else:
-                t.update({'total_score': 0, 'total_rank': 0, 'total_top': 0})
+                t.update({'total_score': 0, 'total_rank': 0, 'total_top': '0%'})
         comments = data.findAll(
             text=lambda text: isinstance(text, bs4.Comment))
         for x in comments:
@@ -280,7 +280,7 @@ class Session:
             rar: str = x.select('img')[0]['src'].split('bg-')[1]  # type: ignore # nopep8
             if rar in ['not-received', 'common', 'rare', 'very-rare', 'epic', 'legendary', 'supreme', 'artifact']:
                 ico: str = x.select('img')[1]['src'].split('icon-')[1]  # type: ignore # nopep8
-                if ico in ['daily-game', 'invited-players', 'killed-enemies', 'mined-resources', 'of-merit', 'beta-tester-season-2'] or ico[:8] == 'season-1':
+                if ico in ['daily-game', 'invited-players', 'killed-enemies', 'mined-resources', 'skillful', 'of-merit', 'beta-tester-season-2'] or ico[:8] == 'season-1':
                     col: str = x.select('img')[-1]['color']  # type: ignore # nopep8
                     t['badges'][ico] = (rar, col)
         labels = data.select('table[width="800"][align="center"]')[-1].select('label')  # type: ignore # nopep8
