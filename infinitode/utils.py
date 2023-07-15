@@ -3,10 +3,7 @@ from __future__ import annotations
 # std
 from typing import Any
 
-__all__ = (
-    'MISSING',
-    'try_int'
-)
+__all__ = ("MISSING", "try_int")
 
 
 def try_int(string: str, /, *, default: int = 0) -> int:
@@ -30,7 +27,7 @@ class _MissingSentinel:
         return 0
 
     def __repr__(self):
-        return '...'
+        return "..."
 
 
 MISSING: Any = _MissingSentinel()

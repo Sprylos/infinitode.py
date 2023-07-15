@@ -1,13 +1,7 @@
 from __future__ import annotations
 
 # std
-from typing import (
-    Any,
-    Dict,
-    Optional,
-    Union,
-    TYPE_CHECKING
-)
+from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 
 # local
 from .errors import InfinitodeError
@@ -17,28 +11,29 @@ if TYPE_CHECKING:
     from .core import Session
     from .player import Player
 
-__all__ = ('Score',)
+__all__ = ("Score",)
 
 
 class Score:
     """Represents a single in-game Score."""
+
     __slots__ = (
-        '_method',
-        '_mapname',
-        '_mode',
-        '_difficulty',
-        '_playerid',
-        '_rank',
-        '_score',
-        'raw',
-        '_has_pfp',
-        '_level',
-        '_nickname',
-        '_pinned_badge',
-        '_position',
-        '_top',
-        '_total',
-        '_player',
+        "_method",
+        "_mapname",
+        "_mode",
+        "_difficulty",
+        "_playerid",
+        "_rank",
+        "_score",
+        "raw",
+        "_has_pfp",
+        "_level",
+        "_nickname",
+        "_pinned_badge",
+        "_position",
+        "_top",
+        "_total",
+        "_player",
     )
 
     def __init__(
@@ -58,7 +53,7 @@ class Score:
         position: Optional[int] = None,
         top: Optional[str] = None,
         total: Optional[Union[str, int]] = None,
-        player: Optional[Player] = None
+        player: Optional[Player] = None,
     ) -> None:
         self._method = method
         self._mapname = mapname
@@ -70,8 +65,12 @@ class Score:
         self._has_pfp = hasPfp
         self._level = level
         self._nickname = nickname
-        self._pinned_badge: Optional[Badge] = Badge(**pinnedBadge) if pinnedBadge is not None else None  # nopep8
-        self._position: Optional[int] = int(position) if position is not None else None  # nopep8
+        self._pinned_badge: Optional[Badge] = (
+            Badge(**pinnedBadge) if pinnedBadge is not None else None
+        )  # nopep8
+        self._position: Optional[int] = (
+            int(position) if position is not None else None
+        )  # nopep8
         self._top = top
         # apparently some payloads provide total, but i think it is pointless as a property
         # so i will keep it as a private attribute just in case it will ever be needed
@@ -87,10 +86,10 @@ class Score:
         mode: str,
         difficulty: str,
         playerid: str,
-        payload: Dict[str, Any]
+        payload: Dict[str, Any],
     ) -> Score:
-        ''''Builds an instance with the given payload.'''
-        score: Dict[str, Any] = payload['player']
+        """'Builds an instance with the given payload."""
+        score: Dict[str, Any] = payload["player"]
         return cls(method, mapname, mode, difficulty, playerid, **score)
 
     @property
@@ -173,23 +172,29 @@ class Score:
         """Formats the score the way i use it in my Advinas bot."""
         if self._nickname is None:
             raise InfinitodeError(
-                'The score is not valid for formatting (There is no nickname attached to this score).')
-        return '#{:<5} {:<22} {:>0,}'.format(self._rank, self._nickname if len(self._nickname) < 21 else f"{self._nickname[:19]}...", self._score)
+                "The score is not valid for formatting (There is no nickname attached to this score)."
+            )
+        return "#{:<5} {:<22} {:>0,}".format(
+            self._rank,
+            self._nickname if len(self._nickname) < 21 else f"{self._nickname[:19]}...",
+            self._score,
+        )
 
     def print_score(self):
+        """Prints out the result of format_score()."""
         print(self.format_score())
 
     # magic methods
 
     def __repr__(self) -> str:
         attrs = {
-            'method': self._method,
-            'mapname': self._mapname,
-            'mode': self._mode,
-            'difficulty': self._difficulty,
-            'playerid': self._playerid,
-            'rank': self._rank,
-            'score': self._score,
+            "method": self._method,
+            "mapname": self._mapname,
+            "mode": self._mode,
+            "difficulty": self._difficulty,
+            "playerid": self._playerid,
+            "rank": self._rank,
+            "score": self._score,
             # only include the "important" attributes.
             # 'has_pfp': self._has_pfp,
             # 'level': self._level,
@@ -200,5 +205,5 @@ class Score:
             # 'total': self._total,
             # 'player': True if self._player is not None else None
         }
-        inner = ' '.join(f'{k}={v}' for k, v in attrs.items())
-        return f'<{self.__class__.__name__} {inner}>'
+        inner = " ".join(f"{k}={v}" for k, v in attrs.items())
+        return f"<{self.__class__.__name__} {inner}>"

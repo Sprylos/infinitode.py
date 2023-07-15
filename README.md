@@ -105,7 +105,10 @@ async def main():
             player.nickname,
             player.level,
             player.xp,
-            player.xp_max,  # xp required per level (always 1000?)
+            player.xp_max,  # xp required per level
+            player.season_level,
+            player.season_xp,
+            player.season_xp_max,
             player.total_score,
             player.total_rank,
             player.total_top,

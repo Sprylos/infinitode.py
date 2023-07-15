@@ -1,35 +1,26 @@
 from __future__ import annotations
 
 # std
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    overload,
-    Union
-)
+from typing import Any, Dict, List, Optional, overload, Union
 
 # local
 from .score import Score
 
 
-__all__ = ('Leaderboard',)
+__all__ = ("Leaderboard",)
 
 
 class Leaderboard_iterator:
     """Iterator class for a Leaderboard."""
-    __slots__ = (
-        '_scores',
-        '_index'
-    )
+
+    __slots__ = ("_scores", "_index")
 
     def __init__(self, scores: List[Score]) -> None:
         self._scores = scores
         self._index: int = 0
 
     def __repr__(self) -> str:
-        return f'<{self.__class__.__name__} scores={len(self._scores)}>'
+        return f"<{self.__class__.__name__} scores={len(self._scores)}>"
 
     def __next__(self) -> Score:
         try:
@@ -42,18 +33,18 @@ class Leaderboard_iterator:
 
 class Leaderboard:
     """Represents an in-game leaderboard."""
-    __slots__ = (
-        '_method',
-        '_mapname',
-        '_mode',
-        '_difficulty',
-        '_total',
-        'raw',
-        '_date',
-        '_season',
-        '_player',
 
-        '_scores',
+    __slots__ = (
+        "_method",
+        "_mapname",
+        "_mode",
+        "_difficulty",
+        "_total",
+        "raw",
+        "_date",
+        "_season",
+        "_player",
+        "_scores",
     )
 
     def __init__(
@@ -67,7 +58,7 @@ class Leaderboard:
         raw: Dict[str, Any],
         date: Optional[str] = None,
         player: Optional[Score] = None,
-        season: Optional[int] = None
+        season: Optional[int] = None,
     ) -> None:
         self._method = method
         self._mapname = mapname
@@ -91,21 +82,30 @@ class Leaderboard:
         payload: Dict[str, Any],
         *,
         date: Optional[str] = None,
-        season: Optional[int] = None
+        season: Optional[int] = None,
     ) -> Leaderboard:
-        '''Builds an instance with the given payload.'''
-        player: Dict[str, Any] = payload['player']
-        total: int = player['total']
-        if playerid is not None and (player['score'] and player['rank'] and total):
-            player_score = Score(method, mapname, mode,
-                                 difficulty, playerid, **player)
+        """Builds an instance with the given payload."""
+        player: Dict[str, Any] = payload["player"]
+        total: int = player["total"]
+        if playerid is not None and (player["score"] and player["rank"] and total):
+            player_score = Score(method, mapname, mode, difficulty, playerid, **player)
         else:
             player_score = None
-        instance = cls(method, mapname, mode, difficulty, total,
-                       raw=payload, date=date, player=player_score, season=season)
-        for rank, score in enumerate(payload['leaderboards'], start=1):
-            instance._append(Score(method, mapname, mode,
-                             difficulty, rank=rank, **score))
+        instance = cls(
+            method,
+            mapname,
+            mode,
+            difficulty,
+            total,
+            raw=payload,
+            date=date,
+            player=player_score,
+            season=season,
+        )
+        for rank, score in enumerate(payload["leaderboards"], start=1):
+            instance._append(
+                Score(method, mapname, mode, difficulty, rank=rank, **score)
+            )
         return instance
 
     @property
@@ -155,7 +155,7 @@ class Leaderboard:
 
     def format_scores(self) -> str:
         """Default format used in my Advinas Bot. To format the scores yourself, iterate over this object."""
-        return '\n'.join([i.format_score() for i in self._scores])
+        return "\n".join([i.format_score() for i in self._scores])
 
     def print_scores(self) -> None:
         """Prints out the result of format_scores()."""
@@ -166,26 +166,26 @@ class Leaderboard:
         return next((x for x in self._scores if getattr(x, attr, None) == val), None)
 
     def _append(self, score: Score) -> None:
-        '''Internal append method.'''
+        """Internal append method."""
         self._scores.append(score)
 
     # magic methods
 
     def __repr__(self) -> str:
         attrs = {
-            'method': self._method,
-            'mapname': self._mapname,
-            'mode': self._mode,
-            'difficulty': self._difficulty,
-            'total': self._total,
-            'scores': len(self._scores),
+            "method": self._method,
+            "mapname": self._mapname,
+            "mode": self._mode,
+            "difficulty": self._difficulty,
+            "total": self._total,
+            "scores": len(self._scores),
             # Fine to include these 3, when they are not None.
-            'date': self._date,
-            'season': self._season,
-            'player': True if self._player is not None else None
+            "date": self._date,
+            "season": self._season,
+            "player": True if self._player is not None else None,
         }
-        inner = ' '.join(f'{k}={v}' for k, v in attrs.items() if v is not None)
-        return f'<{self.__class__.__name__} {inner}>'
+        inner = " ".join(f"{k}={v}" for k, v in attrs.items() if v is not None)
+        return f"<{self.__class__.__name__} {inner}>"
 
     def __len__(self) -> int:
         return len(self._scores)
@@ -206,13 +206,20 @@ class Leaderboard:
             return self._scores[key]
         elif isinstance(key, slice):
             lb = Leaderboard(
-                self._method, self._mapname, self._mode, self._difficulty, self._total,
-                raw=self.raw, date=self._date, player=self._player, season=self._season
+                self._method,
+                self._mapname,
+                self._mode,
+                self._difficulty,
+                self._total,
+                raw=self.raw,
+                date=self._date,
+                player=self._player,
+                season=self._season,
             )
             lb._scores = self._scores[key]
             return lb
         else:
-            raise KeyError('Only int and slice indexes are allowed.')
+            raise KeyError("Only int and slice indexes are allowed.")
 
     def __iter__(self) -> Leaderboard_iterator:
         return Leaderboard_iterator(self._scores)

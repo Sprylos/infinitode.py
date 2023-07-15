@@ -1,13 +1,7 @@
 from __future__ import annotations
 
 # std
-from typing import (
-    Dict,
-    Optional,
-    Union,
-    Tuple,
-    TYPE_CHECKING
-)
+from typing import Dict, Optional, Union, Tuple, TYPE_CHECKING
 
 # local
 from .score import Score
@@ -18,28 +12,31 @@ if TYPE_CHECKING:
     from .core import Session
 
 
-__all__ = ('Player',)
+__all__ = ("Player",)
 
 
 class Player:
     """Represents an in-game Player."""
-    __slots__ = (
-        '_playerid',
-        '_nickname',
-        '_levels',
-        '_level',
-        '_xp',
-        '_xp_max',
-        '_badges',
-        '_total_score',
-        '_total_rank',
-        '_total_top',
-        '_replays',
-        '_issues',
-        '_created_at',
 
-        '_daily_quest',
-        '_skill_point'
+    __slots__ = (
+        "_playerid",
+        "_nickname",
+        "_levels",
+        "_level",
+        "_xp",
+        "_xp_max",
+        "_season_level",
+        "_season_xp",
+        "_season_xp_max",
+        "_badges",
+        "_total_score",
+        "_total_rank",
+        "_total_top",
+        "_replays",
+        "_issues",
+        "_created_at",
+        "_daily_quest",
+        "_skill_point",
     )
 
     def __init__(
@@ -51,6 +48,9 @@ class Player:
         level: int,
         xp: int,
         xp_max: int,
+        season_level: int,
+        season_xp: int,
+        season_xp_max: int,
         badges: Dict[str, Tuple[str, str]],
         total_score: Union[int, str],
         total_rank: Union[int, str],
@@ -65,6 +65,9 @@ class Player:
         self._level = level
         self._xp = xp
         self._xp_max = xp_max
+        self._season_level = season_level
+        self._season_xp = season_xp
+        self._season_xp_max = season_xp_max
         self._badges = badges
         self._total_score = int(total_score)
         self._total_rank = int(total_rank)
@@ -101,9 +104,24 @@ class Player:
         return self._xp_max
 
     @property
+    def season_level(self) -> int:
+        """The player's season XP level."""
+        return self._season_level
+
+    @property
+    def season_xp(self) -> int:
+        """The player's XP in the current season level."""
+        return self._season_xp
+
+    @property
+    def season_xp_max(self) -> int:
+        """The season XP required for the player to level up."""
+        return self._season_xp_max
+
+    @property
     def badges(self) -> Dict[str, Tuple[str, str]]:
         """
-        The player's badges as a dict in the form: 
+        The player's badges as a dict in the form:
             type: (rarity, colour)
         """
         return self._badges
@@ -141,14 +159,15 @@ class Player:
     @property
     def avatar_link(self):
         """The link to the player's avatar. Invalid URL if the user doesn't have a pfp."""
-        return f'https://infinitode.prineside.com/img/avatars/{self._playerid}-128.png'
+        return f"https://infinitode.prineside.com/img/avatars/{self._playerid}-128.png"
 
     @property
     def daily_quest(self):
         """Returns the player's daily quest score, or raises InfinitodeError if it wasn't fetched yet."""
         if self._daily_quest is MISSING:
             raise InfinitodeError(
-                'This score has not been fetched yet. Use ~.fetch_daily_quest first.')
+                "This score has not been fetched yet. Use ~.fetch_daily_quest first."
+            )
         else:
             return self._daily_quest
 
@@ -157,7 +176,8 @@ class Player:
         """Returns the player's daily quest score, or raises InfinitodeError if it wasn't fetched yet."""
         if self._skill_point is MISSING:
             raise InfinitodeError(
-                'This score has not been fetched yet. Use ~.fetch_skill_point first.')
+                "This score has not been fetched yet. Use ~.fetch_skill_point first."
+            )
         else:
             return self._skill_point
 
@@ -167,11 +187,21 @@ class Player:
             return self._levels[mapname]
         except KeyError:
             self._levels[mapname] = Score(
-                'player', mapname, 'score', 'NORMAL', self._playerid,
-                rank=0, score=0, total=0, top='-%')
+                "player",
+                mapname,
+                "score",
+                "NORMAL",
+                self._playerid,
+                rank=0,
+                score=0,
+                total=0,
+                top="-%",
+            )
             return self._levels[mapname]
 
-    async def fetch_daily_quest(self, session: Optional[Session] = None) -> Optional[Score]:
+    async def fetch_daily_quest(
+        self, session: Optional[Session] = None
+    ) -> Optional[Score]:
         """
         Fetches the player's Daily Quest score if it wasn't fetched already.
         Returns None if the player is not ranked.
@@ -180,13 +210,18 @@ class Player:
             if session is None:
                 if self._daily_quest is MISSING:
                     raise InfinitodeError(
-                        'You need to provide a Session to fetch the daily quest score.')
+                        "You need to provide a Session to fetch the daily quest score."
+                    )
                 else:
                     return self._daily_quest
-            self._daily_quest = (await session.daily_quest_leaderboards(playerid=self._playerid)).player
+            self._daily_quest = (
+                await session.daily_quest_leaderboards(playerid=self._playerid)
+            ).player
         return self._daily_quest
 
-    async def fetch_skill_point(self, session: Optional[Session] = None) -> Optional[Score]:
+    async def fetch_skill_point(
+        self, session: Optional[Session] = None
+    ) -> Optional[Score]:
         """
         Fetches the player's Skill Point score if it wasn't fetched already.
         Returns None if the player is not ranked.
@@ -195,19 +230,22 @@ class Player:
             if session is None:
                 if self._skill_point is MISSING:
                     raise InfinitodeError(
-                        'You need to provide a Session to fetch the skill point score.')
+                        "You need to provide a Session to fetch the skill point score."
+                    )
                 else:
                     return self._skill_point
-            self._skill_point = (await session.skill_point_leaderboard(playerid=self._playerid)).player
+            self._skill_point = (
+                await session.skill_point_leaderboard(playerid=self._playerid)
+            ).player
         return self._skill_point
 
     # magic methods
 
     def __repr__(self) -> str:
         attrs = {
-            'playerid': self._playerid,
-            'nickname': self._nickname,
-            'total_rank': self._total_rank,
+            "playerid": self._playerid,
+            "nickname": self._nickname,
+            "total_rank": self._total_rank,
         }
-        inner = ' '.join(f'{k}={v}' for k, v in attrs.items())
-        return f'<{self.__class__.__name__} {inner}>'
+        inner = " ".join(f"{k}={v}" for k, v in attrs.items())
+        return f"<{self.__class__.__name__} {inner}>"
