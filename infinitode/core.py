@@ -304,7 +304,7 @@ class Session:
 
         # fmt: off
         season = int(seasonal.select_one('label[i18n="season_formatted"]')['i18nf'].replace('["', '').replace('"]', ''))  # type: ignore
-        player_count = int(seasonal.select('label[i18n="player_count_formatted"]')[  # type: ignore
+        player_count = int(seasonal.select('label[i18n="player_count_formatted"]')[
             0]['i18nf'].replace('["', '').replace('"]', '').replace(',', ''))  # type: ignore
         lb = Leaderboard.from_payload(
             'seasonal_leaderboard', 'season', 'score', 'NORMAL', None, {
@@ -367,7 +367,7 @@ class Session:
         )
         if season_level_data is None:
             raise BadArgument("Invalid playerid: " + playerid)
-        t["season_level"] = season_level_data["data"].split(":")[1]  # type: ignore
+        t["season_level"] = int(season_level_data["data"].split(":")[1])  # type: ignore
 
         t["levels"] = {}
         for x in data.select('div[width="800"][height="40"]')[1:]:
@@ -402,7 +402,7 @@ class Session:
             "skillful",
             "of-merit",
             "beta-tester-season-2",
-            f"high-leveled-{t['level'] // 10}",
+            f"high-leveled-{t['level'] // 10 if t['level'] < 100 else 10}",
         ]
         for x in data.select('div[width="80"][height="80"]'):
             rar: str = x.select("img")[0]["src"].split("bg-")[1]  # type: ignore
