@@ -358,16 +358,20 @@ class Session:
             'div[width="530"][align="center"][height="64"][pad-bottom="10"]'
         )
         if season_xp_data is None:
-            raise BadArgument("Invalid playerid: " + playerid)
-        season_xp_borders = season_xp_data.select_one("label").text.split(" / ")  # type: ignore
-        t["season_xp"] = int(season_xp_borders[0])
-        t["season_xp_max"] = int(season_xp_borders[1])
-        season_level_data = season_xp_data.select_one(
-            'div[x="466"][width="64"][height="64"]'
-        )
-        if season_level_data is None:
-            raise BadArgument("Invalid playerid: " + playerid)
-        t["season_level"] = int(season_level_data["data"].split(":")[1])  # type: ignore
+            t["season_xp"] = 0
+            t["season_xp_max"] = 0
+            t["season_level"] = 0
+        else:
+            season_xp_borders = season_xp_data.select_one("label").text.split(" / ")  # type: ignore
+            t["season_xp"] = int(season_xp_borders[0])
+            t["season_xp_max"] = int(season_xp_borders[1])
+            season_level_data = season_xp_data.select_one(
+                'div[x="466"][width="64"][height="64"]'
+            )
+            if season_level_data is None:
+                t["season_level"] = 0
+            else:
+                t["season_level"] = int(season_level_data["data"].split(":")[1])  # type: ignore
 
         t["levels"] = {}
         for x in data.select('div[width="800"][height="40"]')[1:]:
