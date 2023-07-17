@@ -347,7 +347,7 @@ class Session:
                 t["level"] = int(x.split(">")[3].split("<")[0])
                 break
         else:
-            t["level"] = 0
+            t["level"] = 1
         xp_data = data.select_one('div[width="330"][height="64"]')
         if xp_data is None:
             raise BadArgument("Invalid playerid: " + playerid)
@@ -360,7 +360,7 @@ class Session:
         if season_xp_data is None:
             t["season_xp"] = 0
             t["season_xp_max"] = 0
-            t["season_level"] = 0
+            t["season_level"] = 1
         else:
             season_xp_borders = season_xp_data.select_one("label").text.split(" / ")  # type: ignore
             t["season_xp"] = int(season_xp_borders[0])
@@ -369,7 +369,7 @@ class Session:
                 'div[x="466"][width="64"][height="64"]'
             )
             if season_level_data is None:
-                t["season_level"] = 0
+                t["season_level"] = 1
             else:
                 t["season_level"] = int(season_level_data["data"].split(":")[1])  # type: ignore
 
