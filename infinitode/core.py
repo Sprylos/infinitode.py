@@ -359,7 +359,7 @@ class Session:
         )
         if season_xp_data is None:
             t["season_xp"] = 0
-            t["season_xp_max"] = 0
+            t["season_xp_max"] = 500
             t["season_level"] = 1
         else:
             season_xp_borders = season_xp_data.select_one("label").text.split(" / ")  # type: ignore
