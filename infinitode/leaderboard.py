@@ -91,6 +91,7 @@ class Leaderboard:
             player_score = Score(method, mapname, mode, difficulty, playerid, **player)
         else:
             player_score = None
+
         instance = cls(
             method,
             mapname,
@@ -106,6 +107,7 @@ class Leaderboard:
             instance._append(
                 Score(method, mapname, mode, difficulty, rank=rank, **score)
             )
+            
         return instance
 
     @property

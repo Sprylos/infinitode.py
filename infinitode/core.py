@@ -2,7 +2,6 @@ from __future__ import annotations
 
 # std
 import re
-import time
 import asyncio
 import logging
 import datetime
@@ -21,8 +20,8 @@ import bs4
 from .errors import APIError, BadArgument
 from .leaderboard import Leaderboard
 from .player import Player
-from .utils import try_int
 from .score import Score
+from .utils import async_expiring_cache, try_int
 
 
 __all__ = ("Session",)
@@ -38,29 +37,21 @@ LEVELS = (
     '3.1', '3.2', '3.3', '3.4', '3.5', '3.6', '3.7', '3.8', '3.b1',
     '4.1', '4.2', '4.3', '4.4', '4.5', '4.6', '4.7', '4.8', '4.b1',
     '5.1', '5.2', '5.3', '5.4', '5.5', '5.6', '5.7', '5.8', '5.b1', '5.b2',
-    '6.1', '6.2', '6.3', '6.4', '6.5', 'rumble', 'dev', 'zecred',
+    '6.1', '6.2', '6.3', '6.4', '6.5', '6.6', 'rumble', 'dev', 'zecred',
     'DQ1', 'DQ3', 'DQ4', 'DQ5', 'DQ7', 'DQ8', 'DQ9', 'DQ10', 'DQ11', 'DQ12',
 )
+MODES = ('score', 'waves')
+DIFFICULTIES = ('EASY', 'NORMAL', 'ENDLESS_I')
 # fmt: on
+
+
+def _base_url(beta: bool = False) -> str:
+    return f"https://{'beta.' if beta else ''}infinitode.prineside.com/"
 
 
 class Session:
     def __init__(self, session: Optional[aiohttp.ClientSession] = None) -> None:
         self._session = session or aiohttp.ClientSession()
-        self._cooldown: Dict[str, Any] = {
-            "DailyQuestInfo": 0.0,
-            "LatestNews": 0.0,
-            "DailyQuestLeaderboards": {},
-            "SkillPointLeaderboard": 0.0,
-            "BasicLevelsTopLeaderboards": {},
-            "Leaderboards": {},
-            "seasonal": 0.0,
-        }
-        self._DailyQuestLeaderboards: Dict[str, Leaderboard] = {}
-        self._BasicLevelsTopLeaderboards: Dict[str, Leaderboard] = {}
-        self._Leaderboards: Dict[str, Leaderboard] = {}
-        self._SkillPointLeaderboard: Leaderboard
-        self._seasonal: Leaderboard
 
     # async enter and exit allow for the fancy "with" statements
     # useful so you don't have to close the session yourself
@@ -87,23 +78,20 @@ class Session:
             raise BadArgument("Invalid map: " + mapname)
         if playerid is not None and not ID_REGEX.match(playerid):
             raise BadArgument("Invalid playerid: " + playerid)
-        if mode is not None and not mode in ("score", "waves"):
+        if mode is not None and not mode in MODES:
+            raise BadArgument(f"Invalid mode (must be one of {MODES}): " + mode)
+        if difficulty is not None and not difficulty in DIFFICULTIES:
             raise BadArgument(
-                "Invalid mode (must be either 'score' or 'waves'): " + mode
-            )
-        if difficulty is not None and not difficulty in ("EASY", "NORMAL", "ENDLESS_I"):
-            raise BadArgument(
-                "Invalid difficulty (must be one of 'EASY', 'NORMAL', 'ENDLESS_I': "
-                + difficulty
+                f"Invalid difficulty (must be one of {DIFFICULTIES}): " + difficulty
             )
 
     # not being more specific with the payload type
     # so the typechecker stops annoying me
     async def _post(
-        self, arg: str, data: Optional[Dict[str, Any]] = None
+        self, arg: str, data: Optional[Dict[str, Any]] = None, *, beta: bool = False
     ) -> Dict[str, Any]:
         """Internal post method to communicate with Rainy's API"""
-        url = f"https://infinitode.prineside.com/?m=api&a={arg}&apiv=1&g=com.prineside.tdi2&v=282"
+        url = _base_url(beta) + f"?m=api&a={arg}&apiv=1&g=com.prineside.tdi2&v=282"
         _log.info("Sending POST request %s with data %s", arg, data)
         async with self._session.post(url, data=data) as r:
             try:
@@ -119,13 +107,15 @@ class Session:
             else:
                 raise APIError(f'Error response from server: {payload["message"]}')
 
-    # all the mapnames are Any because any python object can be converted to a str
+    @async_expiring_cache()
     async def leaderboards_rank(
         self,
         mapname: Any,
         playerid: str,
         mode: str = "score",
         difficulty: str = "NORMAL",
+        *,
+        beta: bool = False,
     ) -> Score:
         """
         Retrieves a Score of the given player.
@@ -143,17 +133,21 @@ class Session:
                 "mapname": str(mapname),
                 "mode": mode,
             },
+            beta=beta,
         )
         return Score.from_payload(
             "leaderboards_rank", mapname, mode, difficulty, playerid, payload
         )
 
+    @async_expiring_cache()
     async def leaderboards(
         self,
         mapname: Any,
         playerid: Optional[str] = None,
         mode: str = "score",
         difficulty: str = "NORMAL",
+        *,
+        beta: bool = False,
     ) -> Leaderboard:
         """
         Retrieves a Leaderboard.
@@ -162,11 +156,7 @@ class Session:
         self._kwarg_check(
             mapname=mapname, playerid=playerid, mode=mode, difficulty=difficulty
         )
-        key = f"{difficulty}{mode}{mapname}"
-        if not playerid and (
-            time.time() < self._cooldown["Leaderboards"].get(key, 0) + 60
-        ):
-            return self._Leaderboards[key]
+
         payload = await self._post(
             "getLeaderboards",
             data={
@@ -176,21 +166,23 @@ class Session:
                 "mapname": str(mapname),
                 "mode": mode,
             },
+            beta=beta,
         )
         lb = Leaderboard.from_payload(
             "leaderboards", mapname, mode, difficulty, playerid, payload
         )
-        if lb.player is None:
-            self._Leaderboards[key] = lb
-            self._cooldown["Leaderboards"][key] = time.time()
+
         return lb
 
+    @async_expiring_cache()
     async def runtime_leaderboards(
         self,
         mapname: Any,
         playerid: str,
         mode: str = "score",
         difficulty: str = "NORMAL",
+        *,
+        beta: bool = False,
     ) -> Leaderboard:
         """
         Retrieves a Runtime Leaderboard (The one displayed top right in-game).
@@ -209,13 +201,15 @@ class Session:
                 "mapname": str(mapname),
                 "mode": mode,
             },
+            beta=beta,
         )
         return Leaderboard.from_payload(
             "runtime_leaderboards", mapname, mode, difficulty, playerid, payload
         )
 
+    @async_expiring_cache()
     async def skill_point_leaderboard(
-        self, playerid: Optional[str] = None
+        self, playerid: Optional[str] = None, *, beta: bool = False
     ) -> Leaderboard:
         """
         Retrieves the Skill Point Leaderboard.
@@ -223,23 +217,23 @@ class Session:
         """
         if playerid is not None:
             self._kwarg_check(playerid=playerid)
-        elif time.time() < self._cooldown["SkillPointLeaderboard"] + 60:
-            return self._SkillPointLeaderboard
+
         payload = await self._post(
-            "getSkillPointLeaderboard", data={"playerid": playerid}
+            "getSkillPointLeaderboard", data={"playerid": playerid}, beta=beta
         )
         lb = Leaderboard.from_payload(
             "skill_point_leaderboard", "SP", "score", "NORMAL", playerid, payload
         )
-        if lb.player is None:
-            self._SkillPointLeaderboard = lb
-            self._cooldown["SkillPointLeaderboard"] = time.time()
+
         return lb
 
+    @async_expiring_cache()
     async def daily_quest_leaderboards(
         self,
         date: Union[datetime.datetime, str, None] = None,
         playerid: Optional[str] = None,
+        *,
+        beta: bool = False,
         warning: bool = True,
     ) -> Leaderboard:
         """
@@ -249,27 +243,27 @@ class Session:
         The leaderboard contains the top 200 DQ players of the given date.
         """
         if date is None:
-            date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+            date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
         elif isinstance(date, datetime.datetime):
             date = date.strftime("%Y-%m-%d")
         else:
             try:
                 datetime.datetime.strptime(date, "%Y-%m-%d")
             except ValueError:
-                if warning == True:
+                if warning is True:
                     _log.warning(
                         "Invalid date in daily_quest_leaderboards (Use YYYY-MM-DD format): %s",
                         date,
                     )
-                date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-        if not playerid and (
-            time.time() < self._cooldown["DailyQuestLeaderboards"].get(date, 0) + 60
-        ):
-            return self._DailyQuestLeaderboards[date]
+                date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
         if playerid is not None:
             self._kwarg_check(playerid=playerid)
+
         payload = await self._post(
-            "getDailyQuestLeaderboards", data={"date": date, "playerid": playerid}
+            "getDailyQuestLeaderboards",
+            data={"date": date, "playerid": playerid},
+            beta=beta,
         )
         lb = Leaderboard.from_payload(
             "daily_quest_leaderboards",
@@ -280,26 +274,25 @@ class Session:
             payload,
             date=date,
         )
-        if lb.player is None:
-            self._DailyQuestLeaderboards[date] = lb
-            self._cooldown["DailyQuestLeaderboards"][date] = time.time()
+
         return lb
 
-    async def seasonal_leaderboard(self) -> Leaderboard:
+    @async_expiring_cache()
+    async def seasonal_leaderboard(self, beta: bool = False) -> Leaderboard:
         """
         Retrieves the season Leaderboard.
         The leaderboard contains the top 100 scores in the season.
         This coroutine never takes arguments.
         """
-        if time.time() < self._cooldown["seasonal"] + 60:
-            return self._seasonal
-        url = "https://infinitode.prineside.com/xdx/?url=seasonal_leaderboard"
+        url = _base_url(beta) + "xdx/?url=seasonal_leaderboard"
         _log.info("Sending GET request to %s", url)
+
         r = await self._session.get(url=url)
         try:
             r.raise_for_status()
         except aiohttp.ClientResponseError:
             raise APIError("Bad Gateway.")
+
         seasonal = bs4.BeautifulSoup(await r.text(), features="lxml")
 
         # fmt: off
@@ -321,14 +314,13 @@ class Session:
         )
         # fmt: on
 
-        self._seasonal = lb
-        self._cooldown["seasonal"] = time.time()
         return lb
 
-    def _parse_player(self, content: str, playerid: str) -> Player:
+    def _parse_player(self, content: str, playerid: str, beta: bool) -> Player:
         data = bs4.BeautifulSoup(content, features="lxml")
         t: Dict[str, Any] = {}
         t["playerid"] = playerid
+        t["beta"] = beta
         t["nickname"] = data.select_one("label:not([i18n])").text  # type: ignore
         totals = data.select_one('div[width="522"][height="140"][align="center"]')
         if totals is None:
@@ -445,23 +437,26 @@ class Session:
 
         return Player(**t)
 
-    async def player(self, playerid: str) -> Player:
+    @async_expiring_cache()
+    async def player(self, playerid: str, beta: bool = False) -> Player:
         """
         Retrieves the Player.
         A valid playerid needs to be specified.
         """
         self._kwarg_check(playerid=playerid)
-        url = f"https://infinitode.prineside.com/xdx/index.php?url=profile/view&id={playerid}"
+        url = _base_url(beta) + "xdx/index.php?url=profile/view&id=" + playerid
         _log.info("Sending GET request to %s", url)
+
         r = await self._session.get(url=url)
         try:
             r.raise_for_status()
         except aiohttp.ClientResponseError:
             raise APIError("Bad Gateway.")
+
         loop = asyncio.get_event_loop()
         try:
             return await loop.run_in_executor(
-                None, self._parse_player, await r.text(), playerid
+                None, self._parse_player, await r.text(), playerid, beta
             )
         except Exception as exc:
             raise BadArgument("Invalid playerid: " + playerid) from exc

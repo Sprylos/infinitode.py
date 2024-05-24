@@ -174,6 +174,7 @@ class Score:
             raise InfinitodeError(
                 "The score is not valid for formatting (There is no nickname attached to this score)."
             )
+        
         return "#{:<5} {:<22} {:>0,}".format(
             self._rank,
             self._nickname if len(self._nickname) < 21 else f"{self._nickname[:19]}...",
