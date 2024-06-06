@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # std
+from collections.abc import Sequence
 from typing import Any, Dict, List, Optional, overload, Union
 
 # local
@@ -10,28 +11,7 @@ from .score import Score
 __all__ = ("Leaderboard",)
 
 
-class Leaderboard_iterator:
-    """Iterator class for a Leaderboard."""
-
-    __slots__ = ("_scores", "_index")
-
-    def __init__(self, scores: List[Score]) -> None:
-        self._scores = scores
-        self._index: int = 0
-
-    def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} scores={len(self._scores)}>"
-
-    def __next__(self) -> Score:
-        try:
-            score: Score = self._scores[self._index]
-        except IndexError:
-            raise StopIteration
-        self._index += 1
-        return score
-
-
-class Leaderboard:
+class Leaderboard(Sequence[Score]):
     """Represents an in-game leaderboard."""
 
     __slots__ = (
@@ -107,7 +87,7 @@ class Leaderboard:
             instance._append(
                 Score(method, mapname, mode, difficulty, rank=rank, **score)
             )
-            
+
         return instance
 
     @property
@@ -196,12 +176,10 @@ class Leaderboard:
         return item in self._scores
 
     @overload
-    def __getitem__(self, key: int) -> Score:
-        ...
+    def __getitem__(self, key: int) -> Score: ...
 
     @overload
-    def __getitem__(self, key: slice) -> Leaderboard:
-        ...
+    def __getitem__(self, key: slice) -> Leaderboard: ...
 
     def __getitem__(self, key: Any) -> Union[Score, Leaderboard]:
         if isinstance(key, int):
@@ -222,6 +200,3 @@ class Leaderboard:
             return lb
         else:
             raise KeyError("Only int and slice indexes are allowed.")
-
-    def __iter__(self) -> Leaderboard_iterator:
-        return Leaderboard_iterator(self._scores)
