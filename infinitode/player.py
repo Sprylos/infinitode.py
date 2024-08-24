@@ -15,6 +15,9 @@ if TYPE_CHECKING:
 __all__ = ("Player",)
 
 
+AVATAR_URL = "https://storage.prineside.com/files/i2{}/avatars/{}-128.png"
+
+
 class Player:
     """Represents an in-game Player."""
 
@@ -163,7 +166,7 @@ class Player:
     @property
     def avatar_link(self):
         """The link to the player's avatar. Invalid URL if the user doesn't have a pfp."""
-        return f"https://{'beta.' if self._beta else ''}infinitode.prineside.com/img/avatars/{self._playerid}-128.png"
+        return AVATAR_URL.format('beta' if self._beta else '', self._playerid)
 
     @property
     def daily_quest(self):
@@ -210,20 +213,23 @@ class Player:
         Fetches the player's Daily Quest score if it wasn't fetched already.
         Returns None if the player is not ranked.
         """
-        if not self._daily_quest:  # None or MISSING
-            if session is None:
-                if self._daily_quest is MISSING:
-                    raise InfinitodeError(
-                        "You need to provide a Session to fetch the daily quest score."
-                    )
-                else:
-                    return self._daily_quest
+        if self._daily_quest:
+            return self._daily_quest
 
-            self._daily_quest = (
-                await session.daily_quest_leaderboards(playerid=self._playerid, beta=self._beta)
-            ).player
+        if session is None:
+            if self._daily_quest is None:
+                return
+            
+            # daily_quest is MISSING
+            raise InfinitodeError(
+                "You need to provide a Session to fetch the daily quest score."
+            )
+        
+        lb = await session.daily_quest_leaderboards(playerid=self._playerid, beta=self._beta)
+        self._daily_quest = lb.player
 
         return self._daily_quest
+
 
     async def fetch_skill_point(
         self, session: Optional[Session] = None
@@ -232,20 +238,23 @@ class Player:
         Fetches the player's Skill Point score if it wasn't fetched already.
         Returns None if the player is not ranked.
         """
-        if not self._skill_point:  # None or MISSING
-            if session is None:
-                if self._skill_point is MISSING:
-                    raise InfinitodeError(
-                        "You need to provide a Session to fetch the skill point score."
-                    )
-                else:
-                    return self._skill_point
+        if self._skill_point:
+            return self._skill_point
+        
+        if session is None:
+            if self._skill_point is None:
+                return
+            
+            # skill_point is MISSING
+            raise InfinitodeError(
+                "You need to provide a Session to fetch the skill point score."
+            )
 
-            self._skill_point = (
-                await session.skill_point_leaderboard(playerid=self._playerid, beta=self._beta)
-            ).player
+        lb = await session.skill_point_leaderboard( playerid=self._playerid, beta=self._beta)
+        self._skill_point = lb.player
 
         return self._skill_point
+
 
     # magic methods
 
