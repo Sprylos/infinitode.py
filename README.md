@@ -180,7 +180,7 @@ print(player.daily_quest.rank, player.skill_point.score)
 
 ### Beta Scores
 
-Almost all API calls support and additional `beta` boolean parameter. This will make a request to the beta servers instead. No guarantees for it working.
+Almost all API calls support an additional `beta` boolean parameter. This will make a request to the beta servers instead. No guarantees for it working.
 
 ```python
 leaderboard_5_1 = await API.leaderboards(mapname=5.1, mode='waves', beta=True)
