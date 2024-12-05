@@ -67,7 +67,7 @@ class Leaderboard(Sequence[Score]):
         """Builds an instance with the given payload."""
         player: Dict[str, Any] = payload["player"]
         total: int = player["total"]
-        if playerid is not None and (player["score"] and player["rank"] and total):
+        if playerid is not None and player["score"]:
             player_score = Score(method, mapname, mode, difficulty, playerid, **player)
         else:
             player_score = None
