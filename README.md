@@ -1,152 +1,216 @@
 # Infinitode.py
 
-An asynchronous python wrapper for the Infinitode-2 API using `async`-`await` syntax.
-
-## Installing
+An asynchronous Python wrapper for the Infinitode-2 API using `async`-`await` syntax.
 
 ---
 
-Installing via pip:
+## Installation
 
-```
+Install the library via pip:
+
+```bash
 pip install infinitode.py
 ```
 
+---
+
 ## Showcase
 
----
+### Setting Up a Session
+
+Create a session to communicate with Rainy's API. Use the `with` statement to ensure the session closes properly.
+Alternatively you can can simply call `Session.close()` once you don't need it anymore.
 
 ```python
 import asyncio
 import infinitode
 
-
 async def main():
-    # Creates a session to communicate with Rainy's API.
-    # The with statement assures that the underlying session is closed.
-    # Alternatively you can can simply call Session.close() once you don't need it anymore.
     async with infinitode.Session() as API:
+        # Your API calls go here
+        pass
 
-        # The mapname parameter should be in the form presented in the game (ie 5.1).
-        # The mode param (score/waves) defaults to score.
-        # The difficulty param (EASY/NORMAL/ENDLESS_I) which defaults to NORMAL can also be specified,
-        # however easy leaderboards/scores are always empty.
-        # Sometimes a playerid can or must be specified,
-        # and the result will have additional info about that players' score.
-
-        # This returns a score of a specific player with the id U-E9BP-FSN9-H6ENMQ on the map 5.1 in normal mode.
-        # The parameters mapname and playerid are required, mode and difficulty are optional.
-        score_5_1 = await API.leaderboards_rank(mapname='5.1', playerid='U-E9BP-FSN9-H6ENMQ', mode='score', difficulty='NORMAL')
-
-        # This returns a leaderboard of the top 200 wave scores on 5.1 in normal mode.
-        # Only the mapname is required.
-        # mapname can also be a float
-        leaderboard_5_1 = await API.leaderboards(mapname=5.1, playerid=None, mode='waves')
-
-        # The runtime leaderboard is the one displayed in the top right when playing a run.
-        # It is similar to leaderboards, however it will also give the top 1-99% each.
-        # Mapname and playerid are required.
-        runtime_5_1 = await API.runtime_leaderboards(mapname=5.1, playerid='U-E9BP-FSN9-H6ENMQ', difficulty='ENDLESS_I')
-
-        # Top 3 skill point owners, a playerid can be specified for the score of that player.
-        sp_leaderboard = await API.skill_point_leaderboard(playerid='U-E9BP-FSN9-H6ENMQ')
-
-        # Top 200 players of todays dailyquest or the one which date is specified.
-        # The date should be a str in the YYYY-MM-DD format, or a datetime.datetime object.
-        # However the server seems to only save the last 2 or 3 days.
-        # Again, a playerid can be specified.
-        dq_leaderboard = await API.daily_quest_leaderboards()
-
-        # This returns the top 100 players from the season leaderboard.
-        # There is no convenient api response for this call.
-        # Instead the data is parsed, which is why this can take a bit.
-        # This function never takes parameters.
-        season_leaderboard = await API.seasonal_leaderboard()
-
-        # This will return a Player with a lot of attributes.
-        # Like the season leaderboard, the data has to be parsed.
-        # This function always takes a playerid and nothing else.
-        player = await API.player('U-E9BP-FSN9-H6ENMQ')
-
-        # All Leaderboards and Scores have the method, mapname, mode, difficulty attribute:
-        print(score_5_1.method, score_5_1.mapname,
-              runtime_5_1.mode, runtime_5_1.difficulty)
-        # All leaderboards have a total attribute:
-        print(leaderboard_5_1.total)
-
-        # They also have an optional player, date and season attribute
-        print(dq_leaderboard.date)
-        print(season_leaderboard.season)
-
-        # The player attribute will return a Score
-        sp_score = sp_leaderboard.player
-        assert sp_score is not None  # check if the score exists.
-
-        # Scores also always have a playerid, rank and score attribute:
-        print(score_5_1.playerid, score_5_1.rank, score_5_1.score)
-
-        # There is also a variety of optional attributes:
-        # has_pfp, level, nickname, pinned_badge, position, top, total, player
-
-        # Every Leaderboard contains a certain amount of scores, with a maxmimum of 300.
-        # The best way to retrieve the scores is usually iterating through the leaderboard.
-        # for score in leaderboard_5_1:
-        #     print(score.nickname)  # do something with score
-
-        # You can also index a single score:
-        leaderboard_5_1[35].print_score()
-        # or index with a slice to receive a shortened leaderboard:
-        print(len(leaderboard_5_1[0:10]))
-
-        # The last main object is a Player, received only be Session.player()
-        # Every Player has the same attributes.
-        print(
-            player.playerid,
-            player.nickname,
-            player.level,
-            player.xp,
-            player.xp_max,  # xp required per level
-            player.season_level,
-            player.season_xp,
-            player.season_xp_max,
-            player.total_score,
-            player.total_rank,
-            player.total_top,
-            player.replays,
-            player.issues,
-            player.created_at,  # as str
-            player.avatar_link  # even when the person has no pfp
-        )
-
-        # Every player also has a .score() method. It will return the players score for the given level.
-        player.score('5.1').print_score()
-
-        # You can also get the DQ and SP scores with additional API calls:
-        (await player.daily_quest(API)).rank
-        (await player.skill_point(API)).rank
-
-# In case you get a runtime error here, ignore it, that's Windows' shit.
 asyncio.run(main())
 ```
 
-## Logging
+---
+
+### Fetching Leaderboard Data
+
+Parameters:
+- `mapname`: The map identifier (e.g., "5.1" or "4.b1" or "zecred").
+- `playerid` (sometimes optional): The player's unique identifier.
+- `mode` (optional): One of `'score'`, `'waves'`. Defaults to `'score'`.
+- `difficulty` (optional): One of `'EASY'`, `'NORMAL'`, `'ENDLESS_I'`. Defaults to `'NORMAL'`.
+
+#### Player Score on a Specific Map
+
+Retrieve the score of a specific player on a particular map.
+
+```python
+score_5_1 = await API.leaderboards_rank(
+    mapname="5.1",
+    playerid="U-E9BP-FSN9-H6ENMQ",
+    mode="score",
+    difficulty="NORMAL"
+)
+```
+
+#### Top 200 Leaderboard on a Specific Map
+
+Retrieve the leaderboard of the top 200 wave scores on 5.1.
+
+```python
+leaderboard_5_1 = await API.leaderboards(
+    mapname=5.1,
+    mode="waves"
+)
+```
+
+#### Runtime Leaderboard
+
+Fetch the leaderboard displayed during gameplay. This provides additional percentile information.
+
+```python
+runtime_5_1 = await API.runtime_leaderboards(
+    mapname=5.1,
+    playerid="U-E9BP-FSN9-H6ENMQ",
+    difficulty="ENDLESS_I"
+)
+```
 
 ---
+
+#### Skill Point Leaderboard
+
+Get the top 3 skill point owners. Optionally specify a `playerid`.
+
+```python
+sp_leaderboard = await API.skill_point_leaderboard(
+    playerid="U-E9BP-FSN9-H6ENMQ"
+)
+```
+
+
+#### Daily Quest Leaderboard
+
+Retrieve the top 200 players of today's daily quest or a specified date.
+
+- `date`: `YYYY-MM-DD` (string) or `datetime.datetime`.
+
+```python
+dq_leaderboard = await API.daily_quest_leaderboards("2024-12-05")
+```
+
+---
+
+### Working with Leaderboards
+
+A leaderboard is a sequence of scores with additional utility functions.
+
+#### Access Score and Leaderboard Attributes
+
+Leaderboards always have these attributes:
+- `mapname`, `mode`, `difficulty`, `total`
+
+And optionally these:
+- `date`, `season`, `player` (will return a score object)
+
+Scores always have these attributes:
+- `playerid`, `rank`, `score`, `mapname`, `mode`, `difficulty` 
+
+And optionally these:
+- `has_pfp`, `level`, `nickname`, `pinned_badge`, `position`, `top`, `total`, `player` (will return a Player object if fetched beforehand)
+
+#### Example for printing attributes, scores, and leaderboards
+
+```python
+for score in leaderboard_5_1:
+    print(score.nickname)
+    score.print_score()  # Helper method
+
+leaderboard_5_1.print_scores()
+```
+
+#### Slice a Leaderboard
+
+Retrieve a subset of the leaderboard:
+
+```python
+top_1 = leaderboard_5_1[0]
+top_10 = leaderboard_5_1[0:10]
+print(len(top_10))
+```
+
+---
+
+### Player Information
+
+#### Fetch Player Data
+
+Retrieve detailed player information.
+
+```python
+player = await API.player("U-E9BP-FSN9-H6ENMQ")
+```
+
+Attributes include:
+- `playerid`, `nickname`, `level`, `xp`, `season_level`, `total_score`, and many more.
+
+#### Get Player Scores
+
+Use the `score` method to access specific map scores.
+
+```python
+player.score(5.1).print_score()
+```
+
+#### Fetch Daily Quest and Skill Point Scores
+
+Use additional API calls to retrieve daily quest and skill point scores:
+
+```python
+await player.fetch_daily_quest(API)
+await player.fetch_skill_point(API)
+
+print(player.daily_quest.rank, player.skill_point.score)
+```
+
+---
+
+### Beta Scores
+
+Almost all API calls support and additional `beta` boolean parameter. This will make a request to the beta servers instead. No guarantees for it working.
+
+```python
+leaderboard_5_1 = await API.leaderboards(mapname=5.1, mode='waves', beta=True)
+```
+
+
+### Logging
+
+Set up logging to monitor requests and responses. 
+
+- `INFO`: Logs every request.
+- `DEBUG`: Logs server responses.
 
 ```python
 import infinitode
 import asyncio
 import logging
 
-# setup logger
-# INFO will log everytime a request is made
-# DEBUG will log the server's response aswell
 logging.basicConfig(level=logging.INFO)
-
 
 async def main():
     async with infinitode.Session() as API:
-        await API.leaderboards('6.3')  # just an example
+        await API.leaderboards("6.3")
 
 asyncio.run(main())
 ```
+
+---
+
+### Notes
+
+- Some data (e.g., seasonal leaderboard, players) require additional parsing and will take longer to process.
+- Do not abuse this API wrapper for any kind of malicious action.
