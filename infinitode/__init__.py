@@ -7,10 +7,10 @@ An asynchronous wrapper for the Infinitode API.
 
 __author__ = "Sprylos"
 __title__ = "infinitode.py"
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 __license__ = """MIT License
 
-Copyright (c) 2024 Sprylos
+Copyright (c) 2025 Sprylos
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

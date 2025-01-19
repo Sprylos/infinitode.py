@@ -154,7 +154,7 @@ class Leaderboard(Sequence[Score]):
     # magic methods
 
     def __repr__(self) -> str:
-        attrs = {
+        attrs: dict[str, Any] = {
             "method": self._method,
             "mapname": self._mapname,
             "mode": self._mode,

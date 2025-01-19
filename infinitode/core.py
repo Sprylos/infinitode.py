@@ -14,7 +14,7 @@ from typing import (
 
 # packages
 import aiohttp
-import bs4
+from bs4 import BeautifulSoup, Comment
 
 # local
 from .errors import APIError, BadArgument
@@ -26,7 +26,7 @@ from .utils import async_expiring_cache, try_int
 
 __all__ = ("Session",)
 
-_log = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 ID_REGEX = re.compile(r"U-([A-Z0-9]{4}-){2}[A-Z0-9]{6}")
 
@@ -45,13 +45,13 @@ DIFFICULTIES = ('EASY', 'NORMAL', 'ENDLESS_I')
 # fmt: on
 
 
-def _base_url(beta: bool = False) -> str:
+def base_url(beta: bool = False) -> str:
     return f"https://{'beta.' if beta else ''}infinitode.prineside.com/"
 
 
 class Session:
     def __init__(self, session: Optional[aiohttp.ClientSession] = None) -> None:
-        self._session = session or aiohttp.ClientSession()
+        self.__session = session or aiohttp.ClientSession()
 
     # async enter and exit allow for the fancy "with" statements
     # useful so you don't have to close the session yourself
@@ -63,11 +63,11 @@ class Session:
 
     async def close(self):
         """Closes the internal ClientSession."""
-        await self._session.close()
+        await self.__session.close()
 
     # Rough parameter checking, "*" makes params keyword only
     @staticmethod
-    def _kwarg_check(
+    def __kwarg_check(
         *,
         mapname: Optional[str] = None,
         playerid: Optional[str] = None,
@@ -87,20 +87,20 @@ class Session:
 
     # not being more specific with the payload type
     # so the typechecker stops annoying me
-    async def _post(
+    async def __post(
         self, arg: str, data: Optional[Dict[str, Any]] = None, *, beta: bool = False
     ) -> Dict[str, Any]:
         """Internal post method to communicate with Rainy's API"""
-        url = _base_url(beta) + f"?m=api&a={arg}&apiv=1&g=com.prineside.tdi2&v=282"
-        _log.info("Sending POST request %s with data %s", arg, data)
-        async with self._session.post(url, data=data) as r:
+        url = base_url(beta) + f"?m=api&a={arg}&apiv=1&g=com.prineside.tdi2&v=282"
+        LOG.info("Sending POST request %s with data %s", arg, data)
+        async with self.__session.post(url, data=data) as r:
             try:
                 r.raise_for_status()
             except aiohttp.ClientResponseError:
                 raise APIError("Something went wrong. Try again later")
 
             payload: Dict[str, Any] = await r.json()
-            _log.debug("Response to POST request %s: %s", arg, payload)
+            LOG.debug("Response to POST request %s: %s", arg, payload)
 
             if payload["status"] == "success":
                 return payload
@@ -121,10 +121,10 @@ class Session:
         Retrieves a Score of the given player.
         A valid playerid needs to be specified.
         """
-        self._kwarg_check(
+        self.__kwarg_check(
             mapname=mapname, playerid=playerid, mode=mode, difficulty=difficulty
         )
-        payload = await self._post(
+        payload = await self.__post(
             "getLeaderboardsRank",
             data={
                 "gamemode": "BASIC_LEVELS",
@@ -153,11 +153,11 @@ class Session:
         Retrieves a Leaderboard.
         The leaderboard contains the top 200 scores of the specified map.
         """
-        self._kwarg_check(
+        self.__kwarg_check(
             mapname=mapname, playerid=playerid, mode=mode, difficulty=difficulty
         )
 
-        payload = await self._post(
+        payload = await self.__post(
             "getLeaderboards",
             data={
                 "gamemode": "BASIC_LEVELS",
@@ -189,10 +189,10 @@ class Session:
         A valid playerid needs to be specified.
         The leaderboard contains the top 200 scores and one Score for each top% of the specified map.
         """
-        self._kwarg_check(
+        self.__kwarg_check(
             mapname=mapname, playerid=playerid, mode=mode, difficulty=difficulty
         )
-        payload = await self._post(
+        payload = await self.__post(
             "getRuntimeLeaderboards",
             data={
                 "gamemode": "BASIC_LEVELS",
@@ -216,9 +216,9 @@ class Session:
         The leaderboard contains the top 3 skill point owners (looking at you, Eupho!).
         """
         if playerid is not None:
-            self._kwarg_check(playerid=playerid)
+            self.__kwarg_check(playerid=playerid)
 
-        payload = await self._post(
+        payload = await self.__post(
             "getSkillPointLeaderboard", data={"playerid": playerid}, beta=beta
         )
         lb = Leaderboard.from_payload(
@@ -251,16 +251,16 @@ class Session:
                 datetime.datetime.strptime(date, "%Y-%m-%d")
             except ValueError:
                 if warning is True:
-                    _log.warning(
+                    LOG.warning(
                         "Invalid date in daily_quest_leaderboards (Use YYYY-MM-DD format): %s",
                         date,
                     )
                 date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
         if playerid is not None:
-            self._kwarg_check(playerid=playerid)
+            self.__kwarg_check(playerid=playerid)
 
-        payload = await self._post(
+        payload = await self.__post(
             "getDailyQuestLeaderboards",
             data={"date": date, "playerid": playerid},
             beta=beta,
@@ -284,16 +284,16 @@ class Session:
         The leaderboard contains the top 100 scores in the season.
         This coroutine never takes arguments.
         """
-        url = _base_url(beta) + "xdx/?url=seasonal_leaderboard"
-        _log.info("Sending GET request to %s", url)
+        url = base_url(beta) + "xdx/?url=seasonal_leaderboard"
+        LOG.info("Sending GET request to %s", url)
 
-        r = await self._session.get(url=url)
+        r = await self.__session.get(url=url)
         try:
             r.raise_for_status()
         except aiohttp.ClientResponseError:
             raise APIError("Bad Gateway.")
 
-        seasonal = bs4.BeautifulSoup(await r.text(), features="lxml")
+        seasonal = BeautifulSoup(await r.text(), features="lxml")
 
         # fmt: off
         season = int(seasonal.select_one('label[i18n="season_formatted"]')['i18nf'].replace('["', '').replace('"]', ''))  # type: ignore
@@ -316,56 +316,102 @@ class Session:
 
         return lb
 
-    def _parse_player(self, content: str, playerid: str, beta: bool) -> Player:
-        data = bs4.BeautifulSoup(content, features="lxml")
+    @async_expiring_cache()
+    async def player(self, playerid: str, beta: bool = False) -> Player:
+        """
+        Retrieves the Player.
+        A valid playerid needs to be specified.
+        """
+        self.__kwarg_check(playerid=playerid)
+        url = base_url(beta) + "xdx/index.php?url=profile/view&id=" + playerid
+        LOG.info("Sending GET request to %s", url)
+
+        r = await self.__session.get(url=url)
+        try:
+            r.raise_for_status()
+        except aiohttp.ClientResponseError:
+            raise APIError("Bad Gateway.")
+
+        loop = asyncio.get_event_loop()
+        try:
+            return await loop.run_in_executor(
+                None, self.__parse_player, await r.text(), playerid, beta
+            )
+        except Exception as exc:
+            raise BadArgument("Invalid playerid: " + playerid) from exc
+
+    @classmethod
+    def __parse_player(cls, content: str, playerid: str, beta: bool) -> Player:
+        data = BeautifulSoup(content, features="lxml")
+
         t: Dict[str, Any] = {}
         t["playerid"] = playerid
         t["beta"] = beta
         t["nickname"] = data.select_one("label:not([i18n])").text  # type: ignore
+
+        cls.__parse_totals(data, t)
+        cls.__parse_level_from_comments(data, t)
+        cls.__parse_xp_data(data, t)
+        cls.__parse_levels(data, t)
+        cls.__parse_badges(data, t)
+        cls.__parse_misc(data, t)
+
+        return Player(**t)
+
+    @staticmethod
+    def __parse_totals(data: BeautifulSoup, t: Dict[str, Any]) -> None:
         totals = data.select_one('div[width="522"][height="140"][align="center"]')
         if totals is None:
             t.update({"total_score": 0, "total_rank": 0, "total_top": 0})
+            return
+
+        totals = totals.select("label")
+        if len(totals) >= 4:
+            t["total_score"] = try_int(totals[1].text.replace(",", ""))
+            t["total_rank"] = try_int(totals[2].text.replace(",", ""))
+            t["total_top"] = totals[3].text.replace("- Top ", "")
         else:
-            totals = totals.select("label")
-            if len(totals) >= 4:
-                t["total_score"] = try_int(totals[1].text.replace(",", ""))
-                t["total_rank"] = try_int(totals[2].text.replace(",", ""))
-                t["total_top"] = totals[3].text.replace("- Top ", "")
-            else:
-                t.update({"total_score": 0, "total_rank": 0, "total_top": "0%"})
-        comments = data.findAll(text=lambda text: isinstance(text, bs4.Comment))
+            t.update({"total_score": 0, "total_rank": 0, "total_top": "0%"})
+
+    @staticmethod
+    def __parse_level_from_comments(data: BeautifulSoup, t: Dict[str, Any]) -> None:
+        comments = data.findAll(text=lambda text: isinstance(text, Comment))
         for x in comments:
             if "Level:" in x:
                 t["level"] = int(x.split(">")[3].split("<")[0])
                 break
         else:
             t["level"] = 1
+
+    @staticmethod
+    def __parse_xp_data(data: BeautifulSoup, t: Dict[str, Any]) -> None:
         xp_data = data.select_one('div[width="330"][height="64"]')
-        if xp_data is None:
-            raise BadArgument("Invalid playerid: " + playerid)
         xp_data = xp_data.select_one("label").text.split(" / ")  # type: ignore
         t["xp"] = int(xp_data[0])
         t["xp_max"] = int(xp_data[1])
         season_xp_data = data.select_one(
             'div[width="530"][align="center"][height="64"][pad-bottom="10"]'
         )
+
         if season_xp_data is None:
-            t["season_xp"] = 0
-            t["season_xp_max"] = 500
+            t.update({"season_xp": 0, "season_xp_max": 500, "season_level": 1})
+            return
+
+        season_xp_borders = season_xp_data.select_one("label").text.split(" / ")  # type: ignore
+        t["season_xp"] = int(season_xp_borders[0])
+        t["season_xp_max"] = int(season_xp_borders[1])
+        season_level_data = season_xp_data.select_one(
+            'div[x="466"][width="64"][height="64"]'
+        )
+        if season_level_data is None:
             t["season_level"] = 1
         else:
-            season_xp_borders = season_xp_data.select_one("label").text.split(" / ")  # type: ignore
-            t["season_xp"] = int(season_xp_borders[0])
-            t["season_xp_max"] = int(season_xp_borders[1])
-            season_level_data = season_xp_data.select_one(
-                'div[x="466"][width="64"][height="64"]'
-            )
-            if season_level_data is None:
-                t["season_level"] = 1
-            else:
-                t["season_level"] = int(season_level_data["data"].split(":")[1])  # type: ignore
+            t["season_level"] = int(season_level_data["data"].split(":")[1])  # type: ignore
 
+    @staticmethod
+    def __parse_levels(data: BeautifulSoup, t: Dict[str, Any]) -> None:
         t["levels"] = {}
+
         for x in data.select('div[width="800"][height="40"]')[1:]:
             level_data = x.select("label")
             level = level_data[0].text
@@ -381,7 +427,7 @@ class Session:
                 level,
                 "score",
                 "NORMAL",
-                playerid,
+                t["playerid"],
                 rank=rank,
                 score=score,
                 total=total,
@@ -389,7 +435,11 @@ class Session:
                 level=t["level"],
                 nickname=t["nickname"],
             )
+
+    @staticmethod
+    def __parse_badges(data: BeautifulSoup, t: Dict[str, Any]) -> None:
         t["badges"] = {}
+
         icos = [
             "daily-game",
             "invited-players",
@@ -400,63 +450,40 @@ class Session:
             "beta-tester-season-2",
             f"high-leveled-{t['level'] // 10 if t['level'] < 100 else 10}",
         ]
+        rars = (
+            "not-received",
+            "common",
+            "rare",
+            "very-rare",
+            "epic",
+            "legendary",
+            "supreme",
+            "artifact",
+        )
+
         for x in data.select('div[width="80"][height="80"]'):
             rar: str = x.select("img")[0]["src"].split("bg-")[1]  # type: ignore
-            if rar in [
-                "not-received",
-                "common",
-                "rare",
-                "very-rare",
-                "epic",
-                "legendary",
-                "supreme",
-                "artifact",
-            ]:
+            if rar in rars:
                 ico: str = x.select("img")[1]["src"].split("icon-")[1]  # type: ignore
-                if (
-                    ico
-                    in icos
-                    + [
-                        "youtube-author-" + rar,
-                        f"season-level-{rar}-2",
-                    ]
-                    or ico[:8] == "season-1"
-                ):
+                if ico in icos + [
+                    "youtube-author-" + rar,
+                    f"season-level-{rar}-2",
+                    f"season-level-{rar}-3",
+                ] or ico[:8] in ("season-1", "season-2"):
                     col: str = x.select("img")[-1]["color"]  # type: ignore
                     t["badges"][ico] = (rar, col)
+
+    @staticmethod
+    def __parse_misc(data: BeautifulSoup, t: Dict[str, Any]) -> None:
         labels = data.select('table[width="800"][align="center"]')[-1].select("label")
         replays = labels[-3].string.split(" ")  # type: ignore
         t["replays"] = 0 if len(replays) != 4 else int(replays[3])
+
         issues = labels[-2].string.split(" ")  # type: ignore
         t["issues"] = 0 if len(issues) != 6 else int(issues[0][3:])
+
         sp = list(labels[-1].string.split("ned ")[1].split(" "))  # type: ignore
         day = sp[0][:-2] if len(sp[0][:2]) == 2 else "0" + sp[0][:2]
         t["created_at"] = datetime.datetime.strptime(
             day + " " + sp[-2] + " " + sp[-1], "%d %B %Y"
         ).strftime("%Y-%m-%d")
-
-        return Player(**t)
-
-    @async_expiring_cache()
-    async def player(self, playerid: str, beta: bool = False) -> Player:
-        """
-        Retrieves the Player.
-        A valid playerid needs to be specified.
-        """
-        self._kwarg_check(playerid=playerid)
-        url = _base_url(beta) + "xdx/index.php?url=profile/view&id=" + playerid
-        _log.info("Sending GET request to %s", url)
-
-        r = await self._session.get(url=url)
-        try:
-            r.raise_for_status()
-        except aiohttp.ClientResponseError:
-            raise APIError("Bad Gateway.")
-
-        loop = asyncio.get_event_loop()
-        try:
-            return await loop.run_in_executor(
-                None, self._parse_player, await r.text(), playerid, beta
-            )
-        except Exception as exc:
-            raise BadArgument("Invalid playerid: " + playerid) from exc

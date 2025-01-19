@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # std
-from typing import Dict, Optional, Union, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Optional, Union, Tuple, TYPE_CHECKING
 
 # local
 from .score import Score
@@ -166,7 +166,7 @@ class Player:
     @property
     def avatar_link(self):
         """The link to the player's avatar. Invalid URL if the user doesn't have a pfp."""
-        return AVATAR_URL.format('beta' if self._beta else '', self._playerid)
+        return AVATAR_URL.format("beta" if self._beta else "", self._playerid)
 
     @property
     def daily_quest(self):
@@ -219,17 +219,18 @@ class Player:
         if session is None:
             if self._daily_quest is None:
                 return
-            
+
             # daily_quest is MISSING
             raise InfinitodeError(
                 "You need to provide a Session to fetch the daily quest score."
             )
-        
-        lb = await session.daily_quest_leaderboards(playerid=self._playerid, beta=self._beta)
+
+        lb = await session.daily_quest_leaderboards(
+            playerid=self._playerid, beta=self._beta
+        )
         self._daily_quest = lb.player
 
         return self._daily_quest
-
 
     async def fetch_skill_point(
         self, session: Optional[Session] = None
@@ -240,26 +241,27 @@ class Player:
         """
         if self._skill_point:
             return self._skill_point
-        
+
         if session is None:
             if self._skill_point is None:
                 return
-            
+
             # skill_point is MISSING
             raise InfinitodeError(
                 "You need to provide a Session to fetch the skill point score."
             )
 
-        lb = await session.skill_point_leaderboard( playerid=self._playerid, beta=self._beta)
+        lb = await session.skill_point_leaderboard(
+            playerid=self._playerid, beta=self._beta
+        )
         self._skill_point = lb.player
 
         return self._skill_point
 
-
     # magic methods
 
     def __repr__(self) -> str:
-        attrs = {
+        attrs: dict[str, Any] = {
             "playerid": self._playerid,
             "nickname": self._nickname,
             "total_rank": self._total_rank,

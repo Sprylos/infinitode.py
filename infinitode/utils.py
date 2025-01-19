@@ -34,7 +34,7 @@ def async_expiring_cache(seconds: int = 60) -> Any:
                 value, timestamp = cache[key]
                 if time.time() < timestamp + seconds:
                     return value
-                
+   
             coro = func(*args, **kwargs)
             value = asyncio.ensure_future(coro)
             cache[key] = (value, time.time())
