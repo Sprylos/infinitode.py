@@ -20,10 +20,7 @@ def try_int(string: str, /, *, default: int = 0) -> int:
 
 
 def async_expiring_cache(seconds: int = 60) -> Any:
-    """Decorator to cache coroutines return value for the given amount of seconds.
-    
-    It is not perfect because 
-    """
+    """Decorator to cache coroutines return value for the given amount of seconds."""
 
     def decorator(func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, asyncio.Task[T]]:
         cache: Dict[Tuple[Any, ...], Tuple[asyncio.Task[T], float]] = {}

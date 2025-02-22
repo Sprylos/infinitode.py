@@ -278,7 +278,7 @@ class Session:
         return lb
 
     @async_expiring_cache()
-    async def seasonal_leaderboard(self, beta: bool = False) -> Leaderboard:
+    async def seasonal_leaderboard(self, *, beta: bool = False) -> Leaderboard:
         """
         Retrieves the season Leaderboard.
         The leaderboard contains the top 100 scores in the season.
@@ -317,13 +317,29 @@ class Session:
         return lb
 
     @async_expiring_cache()
-    async def player(self, playerid: str, beta: bool = False) -> Player:
+    async def player(
+        self,
+        playerid: str | None = None,
+        nickname: str | None = None,
+        *,
+        beta: bool = False,
+    ) -> Player:
         """
         Retrieves the Player.
         A valid playerid needs to be specified.
         """
-        self.__kwarg_check(playerid=playerid)
-        url = base_url(beta) + "xdx/index.php?url=profile/view&id=" + playerid
+        if playerid and nickname:
+            raise BadArgument("You can't specify both playerid and nickname.")
+
+        url = base_url(beta)
+        if nickname:
+            url = url + "xdx/index.php?url=profile/view&nickname=" + nickname
+        elif playerid:
+            self.__kwarg_check(playerid=playerid)
+            url = url + "xdx/index.php?url=profile/view&id=" + playerid
+        else:
+            raise BadArgument("You need to specify either playerid or nickname.")
+
         LOG.info("Sending GET request to %s", url)
 
         r = await self.__session.get(url=url)
@@ -335,18 +351,20 @@ class Session:
         loop = asyncio.get_event_loop()
         try:
             return await loop.run_in_executor(
-                None, self.__parse_player, await r.text(), playerid, beta
+                None, self.__parse_player, await r.text(), beta
             )
         except Exception as exc:
-            raise BadArgument("Invalid playerid: " + playerid) from exc
+            raise BadArgument(
+                f"Invalid playerid/nickname: {playerid or nickname}"
+            ) from exc
 
     @classmethod
-    def __parse_player(cls, content: str, playerid: str, beta: bool) -> Player:
+    def __parse_player(cls, content: str, beta: bool) -> Player:
         data = BeautifulSoup(content, features="lxml")
 
         t: Dict[str, Any] = {}
-        t["playerid"] = playerid
         t["beta"] = beta
+        t["playerid"] = data.select_one("label:not([i18n],[font-min-size])").text  # type: ignore
         t["nickname"] = data.select_one("label:not([i18n])").text  # type: ignore
 
         cls.__parse_totals(data, t)

@@ -67,10 +67,8 @@ class Score:
         self._nickname = nickname
         self._pinned_badge: Optional[Badge] = (
             Badge(**pinnedBadge) if pinnedBadge is not None else None
-        )  # nopep8
-        self._position: Optional[int] = (
-            int(position) if position is not None else None
-        )  # nopep8
+        )
+        self._position: Optional[int] = int(position) if position is not None else None
         self._top = top
         # apparently some payloads provide total, but i think it is pointless as a property
         # so i will keep it as a private attribute just in case it will ever be needed
