@@ -51,7 +51,7 @@ def base_url(beta: bool = False) -> str:
 
 class Session:
     def __init__(self, session: Optional[aiohttp.ClientSession] = None) -> None:
-        self.__session = session or aiohttp.ClientSession()
+        self._session = session or aiohttp.ClientSession()
 
     # async enter and exit allow for the fancy "with" statements
     # useful so you don't have to close the session yourself
@@ -63,11 +63,10 @@ class Session:
 
     async def close(self):
         """Closes the internal ClientSession."""
-        await self.__session.close()
+        await self._session.close()
 
-    # Rough parameter checking, "*" makes params keyword only
     @staticmethod
-    def __kwarg_check(
+    def _kwarg_check(
         *,
         mapname: Optional[str] = None,
         playerid: Optional[str] = None,
@@ -87,13 +86,13 @@ class Session:
 
     # not being more specific with the payload type
     # so the typechecker stops annoying me
-    async def __post(
+    async def _post(
         self, arg: str, data: Optional[Dict[str, Any]] = None, *, beta: bool = False
     ) -> Dict[str, Any]:
         """Internal post method to communicate with Rainy's API"""
         url = base_url(beta) + f"?m=api&a={arg}&apiv=1&g=com.prineside.tdi2&v=282"
         LOG.info("Sending POST request %s with data %s", arg, data)
-        async with self.__session.post(url, data=data) as r:
+        async with self._session.post(url, data=data) as r:
             try:
                 r.raise_for_status()
             except aiohttp.ClientResponseError:
@@ -121,10 +120,10 @@ class Session:
         Retrieves a Score of the given player.
         A valid playerid needs to be specified.
         """
-        self.__kwarg_check(
+        self._kwarg_check(
             mapname=mapname, playerid=playerid, mode=mode, difficulty=difficulty
         )
-        payload = await self.__post(
+        payload = await self._post(
             "getLeaderboardsRank",
             data={
                 "gamemode": "BASIC_LEVELS",
@@ -153,11 +152,11 @@ class Session:
         Retrieves a Leaderboard.
         The leaderboard contains the top 200 scores of the specified map.
         """
-        self.__kwarg_check(
+        self._kwarg_check(
             mapname=mapname, playerid=playerid, mode=mode, difficulty=difficulty
         )
 
-        payload = await self.__post(
+        payload = await self._post(
             "getLeaderboards",
             data={
                 "gamemode": "BASIC_LEVELS",
@@ -189,10 +188,10 @@ class Session:
         A valid playerid needs to be specified.
         The leaderboard contains the top 200 scores and one Score for each top% of the specified map.
         """
-        self.__kwarg_check(
+        self._kwarg_check(
             mapname=mapname, playerid=playerid, mode=mode, difficulty=difficulty
         )
-        payload = await self.__post(
+        payload = await self._post(
             "getRuntimeLeaderboards",
             data={
                 "gamemode": "BASIC_LEVELS",
@@ -216,9 +215,9 @@ class Session:
         The leaderboard contains the top 3 skill point owners (looking at you, Eupho!).
         """
         if playerid is not None:
-            self.__kwarg_check(playerid=playerid)
+            self._kwarg_check(playerid=playerid)
 
-        payload = await self.__post(
+        payload = await self._post(
             "getSkillPointLeaderboard", data={"playerid": playerid}, beta=beta
         )
         lb = Leaderboard.from_payload(
@@ -260,9 +259,9 @@ class Session:
                 date = date_obj.strftime("%Y-%m-%d")  # allows for missing leading zeros
 
         if playerid is not None:
-            self.__kwarg_check(playerid=playerid)
+            self._kwarg_check(playerid=playerid)
 
-        payload = await self.__post(
+        payload = await self._post(
             "getDailyQuestLeaderboards",
             data={"date": date, "playerid": playerid},
             beta=beta,
@@ -289,7 +288,7 @@ class Session:
         url = base_url(beta) + "xdx/?url=seasonal_leaderboard"
         LOG.info("Sending GET request to %s", url)
 
-        r = await self.__session.get(url=url)
+        r = await self._session.get(url=url)
         try:
             r.raise_for_status()
         except aiohttp.ClientResponseError:
@@ -337,14 +336,14 @@ class Session:
         if nickname:
             url = url + "xdx/index.php?url=profile/view&nickname=" + nickname
         elif playerid:
-            self.__kwarg_check(playerid=playerid)
+            self._kwarg_check(playerid=playerid)
             url = url + "xdx/index.php?url=profile/view&id=" + playerid
         else:
             raise BadArgument("You need to specify either playerid or nickname.")
 
         LOG.info("Sending GET request to %s", url)
 
-        r = await self.__session.get(url=url)
+        r = await self._session.get(url=url)
         try:
             r.raise_for_status()
         except aiohttp.ClientResponseError:
@@ -353,7 +352,7 @@ class Session:
         loop = asyncio.get_event_loop()
         try:
             return await loop.run_in_executor(
-                None, self.__parse_player, await r.text(), beta
+                None, self._parse_player, await r.text(), beta
             )
         except Exception as exc:
             raise BadArgument(
@@ -361,7 +360,7 @@ class Session:
             ) from exc
 
     @classmethod
-    def __parse_player(cls, content: str, beta: bool) -> Player:
+    def _parse_player(cls, content: str, beta: bool) -> Player:
         data = BeautifulSoup(content, features="lxml")
 
         t: Dict[str, Any] = {}
@@ -369,17 +368,17 @@ class Session:
         t["playerid"] = data.select_one("label:not([i18n],[font-min-size])").text  # type: ignore
         t["nickname"] = data.select_one("label:not([i18n])").text  # type: ignore
 
-        cls.__parse_totals(data, t)
-        cls.__parse_level_from_comments(data, t)
-        cls.__parse_xp_data(data, t)
-        cls.__parse_levels(data, t)
-        cls.__parse_badges(data, t)
-        cls.__parse_misc(data, t)
+        cls._parse_totals(data, t)
+        cls._parse_level_from_comments(data, t)
+        cls._parse_xp_data(data, t)
+        cls._parse_levels(data, t)
+        cls._parse_badges(data, t)
+        cls._parse_misc(data, t)
 
         return Player(**t)
 
     @staticmethod
-    def __parse_totals(data: BeautifulSoup, t: Dict[str, Any]) -> None:
+    def _parse_totals(data: BeautifulSoup, t: Dict[str, Any]) -> None:
         totals = data.select_one('div[width="522"][height="140"][align="center"]')
         if totals is None:
             t.update({"total_score": 0, "total_rank": 0, "total_top": 0})
@@ -394,7 +393,7 @@ class Session:
             t.update({"total_score": 0, "total_rank": 0, "total_top": "0%"})
 
     @staticmethod
-    def __parse_level_from_comments(data: BeautifulSoup, t: Dict[str, Any]) -> None:
+    def _parse_level_from_comments(data: BeautifulSoup, t: Dict[str, Any]) -> None:
         comments = data.findAll(text=lambda text: isinstance(text, Comment))
         for x in comments:
             if "Level:" in x:
@@ -404,7 +403,7 @@ class Session:
             t["level"] = 1
 
     @staticmethod
-    def __parse_xp_data(data: BeautifulSoup, t: Dict[str, Any]) -> None:
+    def _parse_xp_data(data: BeautifulSoup, t: Dict[str, Any]) -> None:
         xp_data = data.select_one('div[width="330"][height="64"]')
         xp_data = xp_data.select_one("label").text.split(" / ")  # type: ignore
         t["xp"] = int(xp_data[0])
@@ -429,7 +428,7 @@ class Session:
             t["season_level"] = int(season_level_data["data"].split(":")[1])  # type: ignore
 
     @staticmethod
-    def __parse_levels(data: BeautifulSoup, t: Dict[str, Any]) -> None:
+    def _parse_levels(data: BeautifulSoup, t: Dict[str, Any]) -> None:
         t["levels"] = {}
 
         for x in data.select('div[width="800"][height="40"]')[1:]:
@@ -457,7 +456,7 @@ class Session:
             )
 
     @staticmethod
-    def __parse_badges(data: BeautifulSoup, t: Dict[str, Any]) -> None:
+    def _parse_badges(data: BeautifulSoup, t: Dict[str, Any]) -> None:
         t["badges"] = {}
 
         icos = [
@@ -494,7 +493,7 @@ class Session:
                     t["badges"][ico] = (rar, col)
 
     @staticmethod
-    def __parse_misc(data: BeautifulSoup, t: Dict[str, Any]) -> None:
+    def _parse_misc(data: BeautifulSoup, t: Dict[str, Any]) -> None:
         labels = data.select('table[width="800"][align="center"]')[-1].select("label")
         replays = labels[-3].string.split(" ")  # type: ignore
         t["replays"] = 0 if len(replays) != 4 else int(replays[3])
