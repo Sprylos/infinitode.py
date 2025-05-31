@@ -248,7 +248,7 @@ class Session:
             date = date.strftime("%Y-%m-%d")
         else:
             try:
-                datetime.datetime.strptime(date, "%Y-%m-%d")
+                date_obj = datetime.datetime.strptime(date, "%Y-%m-%d")
             except ValueError:
                 if warning is True:
                     LOG.warning(
@@ -256,6 +256,8 @@ class Session:
                         date,
                     )
                 date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+            else:
+                date = date_obj.strftime("%Y-%m-%d")  # allows for missing leading zeros
 
         if playerid is not None:
             self.__kwarg_check(playerid=playerid)
