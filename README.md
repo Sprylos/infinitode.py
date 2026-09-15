@@ -43,6 +43,11 @@ Parameters:
 - `mode` (optional): One of `'score'`, `'waves'`. Defaults to `'score'`.
 - `difficulty` (optional): One of `'EASY'`, `'NORMAL'`, `'ENDLESS_I'`. Defaults to `'NORMAL'`.
 
+The immutable `infinitode.SUPPORTED_MAPS`, `infinitode.SUPPORTED_MODES`, and
+`infinitode.SUPPORTED_DIFFICULTIES` tuples contain the values accepted by the
+current library. `infinitode.GAME_API_VERSION` exposes the game API version used
+for JSON API calls.
+
 #### Player Score on a Specific Map
 
 Retrieve the score of a specific player on a particular map.
@@ -151,7 +156,9 @@ print(len(top_10))
 Retrieve detailed player information.
 
 ```python
-player = await API.player("U-E9BP-FSN9-H6ENMQ")
+player = await API.player(playerid="U-E9BP-FSN9-H6ENMQ")
+# Or look up a case-insensitive, exact nickname:
+player = await API.player(nickname="EuphoRowan")
 ```
 
 Attributes include:
@@ -175,6 +182,29 @@ await player.fetch_skill_point(API)
 
 print(player.daily_quest.rank, player.skill_point.score)
 ```
+
+An invalid argument raises `infinitode.errors.BadArgument`, and an exact lookup
+with no matching player raises its `PlayerNotFound` subclass. HTTP and JSON API
+failures raise `APIError`; unexpected changes to parsed HTML raise `ParseError`.
+
+---
+
+### Experimental features
+
+`Session.search_players()` performs an unauthenticated, case-insensitive
+substring search of player nicknames:
+
+```python
+players = await API.search_players("eupho", limit=20)
+for result in players:
+    print(result.playerid, result.nickname, result.level, result.has_avatar)
+```
+
+Each `PlayerSummary` contains only the verified `playerid`, `nickname`, `level`,
+and `has_avatar` fields. The upstream page returns at most 100 results and does
+not offer pagination. This feature parses an HTML page rather than a stable JSON
+API, so upstream markup changes may cause `ParseError` until the parser is
+updated.
 
 ---
 

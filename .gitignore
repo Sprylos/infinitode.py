@@ -3,3 +3,4 @@ build/
 *.egg-info/
 __pycache__/
 test.*
+live_api_test.py

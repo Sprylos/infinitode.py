@@ -17,21 +17,29 @@ import aiohttp
 from bs4 import BeautifulSoup, Comment
 
 # local
-from .errors import APIError, BadArgument
+from .errors import APIError, BadArgument, ParseError, PlayerNotFound
 from .leaderboard import Leaderboard
-from .player import Player
+from .player import Player, PlayerSummary
 from .score import Score
 from .utils import async_expiring_cache, try_int
 
 
-__all__ = ("Session",)
+__all__ = (
+    "Session",
+    "GAME_API_VERSION",
+    "SUPPORTED_MAPS",
+    "SUPPORTED_MODES",
+    "SUPPORTED_DIFFICULTIES",
+)
 
 LOG = logging.getLogger(__name__)
 
 ID_REGEX = re.compile(r"U-([A-Z0-9]{4}-){2}[A-Z0-9]{6}")
+GAME_API_VERSION = 282
 
 # fmt: off
-LEVELS = (
+SUPPORTED_MAPS = (
+    '0.1', '0.2', '0.3', '0.4',
     '1.1', '1.2', '1.3', '1.4', '1.5', '1.6', '1.7', '1.8', '1.b1',
     '2.1', '2.2', '2.3', '2.4', '2.5', '2.6', '2.7', '2.8', '2.b1',
     '3.1', '3.2', '3.3', '3.4', '3.5', '3.6', '3.7', '3.8', '3.b1',
@@ -40,9 +48,13 @@ LEVELS = (
     '6.1', '6.2', '6.3', '6.4', '6.5', '6.6', 'rumble', 'dev', 'zecred',
     'DQ1', 'DQ3', 'DQ4', 'DQ5', 'DQ7', 'DQ8', 'DQ9', 'DQ10', 'DQ11', 'DQ12',
 )
-MODES = ('score', 'waves')
-DIFFICULTIES = ('EASY', 'NORMAL', 'ENDLESS_I')
+SUPPORTED_MODES = ('score', 'waves')
+SUPPORTED_DIFFICULTIES = ('EASY', 'NORMAL', 'ENDLESS_I')
 # fmt: on
+
+LEVELS = SUPPORTED_MAPS
+MODES = SUPPORTED_MODES
+DIFFICULTIES = SUPPORTED_DIFFICULTIES
 
 
 def base_url(beta: bool = False) -> str:
@@ -74,14 +86,16 @@ class Session:
         difficulty: Optional[str] = None,
     ) -> None:
         if mapname is not None and str(mapname) not in LEVELS:
-            raise BadArgument("Invalid map: " + mapname)
-        if playerid is not None and not ID_REGEX.match(playerid):
-            raise BadArgument("Invalid playerid: " + playerid)
-        if mode is not None and not mode in MODES:
-            raise BadArgument(f"Invalid mode (must be one of {MODES}): " + mode)
-        if difficulty is not None and not difficulty in DIFFICULTIES:
+            raise BadArgument(f"Invalid map: {mapname}")
+        if playerid is not None and (
+            not isinstance(playerid, str) or ID_REGEX.fullmatch(playerid) is None
+        ):
+            raise BadArgument(f"Invalid playerid: {playerid}")
+        if mode is not None and mode not in MODES:
+            raise BadArgument(f"Invalid mode (must be one of {MODES}): {mode}")
+        if difficulty is not None and difficulty not in DIFFICULTIES:
             raise BadArgument(
-                f"Invalid difficulty (must be one of {DIFFICULTIES}): " + difficulty
+                f"Invalid difficulty (must be one of {DIFFICULTIES}): {difficulty}"
             )
 
     # not being more specific with the payload type
@@ -90,21 +104,29 @@ class Session:
         self, arg: str, data: Optional[Dict[str, Any]] = None, *, beta: bool = False
     ) -> Dict[str, Any]:
         """Internal post method to communicate with Rainy's API"""
-        url = base_url(beta) + f"?m=api&a={arg}&apiv=1&g=com.prineside.tdi2&v=282"
+        url = base_url(beta) + (
+            f"?m=api&a={arg}&apiv=1&g=com.prineside.tdi2&v={GAME_API_VERSION}"
+        )
         LOG.info("Sending POST request %s with data %s", arg, data)
-        async with self._session.post(url, data=data) as r:
-            try:
+        try:
+            async with self._session.post(url, data=data) as r:
                 r.raise_for_status()
-            except aiohttp.ClientResponseError:
-                raise APIError("Something went wrong. Try again later")
+                try:
+                    payload: Dict[str, Any] = await r.json()
+                except (ValueError, TypeError) as exc:
+                    raise APIError("Invalid JSON response from server") from exc
+        except aiohttp.ClientError as exc:
+            raise APIError("Something went wrong. Try again later") from exc
 
-            payload: Dict[str, Any] = await r.json()
-            LOG.debug("Response to POST request %s: %s", arg, payload)
+        if not isinstance(payload, dict):
+            raise APIError("Invalid JSON response from server")
+        LOG.debug("Response to POST request %s: %s", arg, payload)
 
-            if payload["status"] == "success":
-                return payload
-            else:
-                raise APIError(f'Error response from server: {payload["message"]}')
+        if payload.get("status") == "success":
+            return payload
+        raise APIError(
+            f'Error response from server: {payload.get("message", "unknown error")}'
+        )
 
     @async_expiring_cache()
     async def leaderboards_rank(
@@ -282,40 +304,62 @@ class Session:
     async def seasonal_leaderboard(self, *, beta: bool = False) -> Leaderboard:
         """
         Retrieves the season Leaderboard.
-        The leaderboard contains the top 100 scores in the season.
+        The leaderboard contains the top 200 scores in the season.
         This coroutine never takes arguments.
         """
         url = base_url(beta) + "xdx/?url=seasonal_leaderboard"
         LOG.info("Sending GET request to %s", url)
 
-        r = await self._session.get(url=url)
         try:
+            r = await self._session.get(url=url)
             r.raise_for_status()
-        except aiohttp.ClientResponseError:
-            raise APIError("Bad Gateway.")
+            content = await r.text()
+        except aiohttp.ClientError as exc:
+            raise APIError("Bad Gateway.") from exc
 
-        seasonal = BeautifulSoup(await r.text(), features="lxml")
-
-        # fmt: off
-        season = int(seasonal.select_one('label[i18n="season_formatted"]')['i18nf'].replace('["', '').replace('"]', ''))  # type: ignore
-        player_count = int(seasonal.select('label[i18n="player_count_formatted"]')[
-            0]['i18nf'].replace('["', '').replace('"]', '').replace(',', ''))  # type: ignore
-        lb = Leaderboard.from_payload(
-            'seasonal_leaderboard', 'season', 'score', 'NORMAL', None, {
-                'status': 'success',
-                'player': {'total': player_count},
-                'leaderboards': [
-                    {
-                        'playerid': seasonal.select('label[color="LIGHT_BLUE:P300"]')[x]['click'].split('id=')[1],  # type: ignore
-                        'nickname': seasonal.select('label[color="LIGHT_BLUE:P300"]')[x].text,
-                        'score': seasonal.select('label[nowrap="true"][text-align="right"]')[x].text.replace(',', '')
-                    } for x in range(len(seasonal.select('div[x="90"]')))
-                ]
-            }, season=season
-        )
-        # fmt: on
-
-        return lb
+        seasonal = BeautifulSoup(content, features="lxml")
+        try:
+            season_label = seasonal.select_one('label[i18n="season_formatted"]')
+            count_label = seasonal.select_one('label[i18n="player_count_formatted"]')
+            player_labels = seasonal.select('label[color="LIGHT_BLUE:P300"]')
+            score_labels = seasonal.select(
+                'label[nowrap="true"][text-align="right"]'
+            )
+            rows = seasonal.select('div[x="90"]')
+            if season_label is None or count_label is None:
+                raise ValueError("missing seasonal metadata")
+            if len(player_labels) != len(rows) or len(score_labels) < len(rows):
+                raise ValueError("incomplete seasonal rows")
+            season = int(str(season_label["i18nf"]).replace('["', '').replace('"]', ''))
+            player_count = int(
+                str(count_label["i18nf"])
+                .replace('["', '')
+                .replace('"]', '')
+                .replace(',', '')
+            )
+            scores = [
+                {
+                    "playerid": str(player_labels[x]["click"]).split("id=", 1)[1],
+                    "nickname": player_labels[x].text,
+                    "score": score_labels[x].text.replace(",", ""),
+                }
+                for x in range(len(rows))
+            ]
+            return Leaderboard.from_payload(
+                "seasonal_leaderboard",
+                "season",
+                "score",
+                "NORMAL",
+                None,
+                {
+                    "status": "success",
+                    "player": {"total": player_count},
+                    "leaderboards": scores,
+                },
+                season=season,
+            )
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise ParseError("Could not parse seasonal leaderboard HTML") from exc
 
     @async_expiring_cache()
     async def player(
@@ -326,38 +370,120 @@ class Session:
         beta: bool = False,
     ) -> Player:
         """
-        Retrieves the Player.
-        A valid playerid needs to be specified.
+        Retrieves a Player by exact player ID or nickname.
+
+        Nickname matching is case-insensitive. Exactly one lookup value is required.
         """
-        if playerid and nickname:
-            raise BadArgument("You can't specify both playerid and nickname.")
+        if (playerid is None) == (nickname is None):
+            raise BadArgument("Specify exactly one of playerid or nickname.")
 
         url = base_url(beta)
-        if nickname:
-            url = url + "xdx/index.php?url=profile/view&nickname=" + nickname
-        elif playerid:
-            self._kwarg_check(playerid=playerid)
-            url = url + "xdx/index.php?url=profile/view&id=" + playerid
+        if nickname is not None:
+            if not isinstance(nickname, str) or not nickname.strip():
+                raise BadArgument("Nickname must be a non-empty string.")
+            params = {"url": "profile/view", "nickname": nickname}
         else:
-            raise BadArgument("You need to specify either playerid or nickname.")
+            self._kwarg_check(playerid=playerid)
+            params = {"url": "profile/view", "id": playerid}
 
-        LOG.info("Sending GET request to %s", url)
+        url += "xdx/index.php"
+        LOG.info("Sending GET request to %s with params %s", url, params)
 
-        r = await self._session.get(url=url)
         try:
+            r = await self._session.get(url=url, params=params)
             r.raise_for_status()
-        except aiohttp.ClientResponseError:
-            raise APIError("Bad Gateway.")
+            content = await r.text()
+        except aiohttp.ClientError as exc:
+            raise APIError("Bad Gateway.") from exc
+        not_found = BeautifulSoup(content, features="lxml").select_one("label")
+        if (
+            not_found is not None
+            and not_found.get_text(strip=True) == "Player not found:"
+        ):
+            raise PlayerNotFound(f"Player not found: {playerid or nickname}")
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             return await loop.run_in_executor(
-                None, self._parse_player, await r.text(), beta
+                None, self._parse_player, content, beta
             )
         except Exception as exc:
-            raise BadArgument(
-                f"Invalid playerid/nickname: {playerid or nickname}"
-            ) from exc
+            raise ParseError("Could not parse player profile HTML") from exc
+
+    @async_expiring_cache()
+    async def search_players(
+        self, query: str, *, limit: int = 20, beta: bool = False
+    ) -> list[PlayerSummary]:
+        """Searches player nicknames by case-insensitive substring match."""
+        if not isinstance(query, str) or not query.strip():
+            raise BadArgument("Search query must be a non-empty string.")
+        if (
+            isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or not 1 <= limit <= 100
+        ):
+            raise BadArgument("Search limit must be an integer from 1 through 100.")
+
+        url = base_url(beta) + "xdx/index.php"
+        params = {"url": "profile/list", "nickname": query}
+        LOG.info("Sending GET request to %s with params %s", url, params)
+        try:
+            r = await self._session.get(url=url, params=params)
+            r.raise_for_status()
+            content = await r.text()
+        except aiohttp.ClientError as exc:
+            raise APIError("Bad Gateway.") from exc
+        loop = asyncio.get_running_loop()
+        try:
+            results = await loop.run_in_executor(
+                None, self._parse_player_search, content
+            )
+        except Exception as exc:
+            raise ParseError("Could not parse player search HTML") from exc
+        return results[:limit]
+
+    @staticmethod
+    def _parse_player_search(content: str) -> list[PlayerSummary]:
+        data = BeautifulSoup(content, features="lxml")
+        found_label = next(
+            (
+                label
+                for label in data.select("label")
+                if label.get_text(strip=True).startswith("Players found:")
+            ),
+            None,
+        )
+        if found_label is None:
+            raise ValueError("missing player search result count")
+        found_count = int(
+            found_label.get_text(strip=True).split(":", 1)[1].replace(",", "")
+        )
+
+        results: list[PlayerSummary] = []
+        for row in data.select('div[width="960"][height="64"]'):
+            profile = row.select_one('label[click*="profile/view"][click*="id="]')
+            level_badge = row.select_one('div[data^="player-level-badge:"]')
+            avatar = row.select_one('img[src*="/avatars/"]')
+            if profile is None or level_badge is None or avatar is None:
+                raise ValueError("incomplete player search row")
+            click = str(profile["click"])
+            playerid = click.split("id=", 1)[1].split("&", 1)[0]
+            level = int(str(level_badge["data"]).split(":", 1)[1])
+            avatar_src = str(avatar["src"])
+            nickname = profile.get_text()
+            if ID_REGEX.fullmatch(playerid) is None or not nickname:
+                raise ValueError("invalid player search row")
+            results.append(
+                PlayerSummary(
+                    playerid=playerid,
+                    nickname=nickname,
+                    level=level,
+                    has_avatar=not avatar_src.endswith("/guest-64.png"),
+                )
+            )
+        if len(results) != min(found_count, 100):
+            raise ValueError("incomplete player search results")
+        return results
 
     @classmethod
     def _parse_player(cls, content: str, beta: bool) -> Player:

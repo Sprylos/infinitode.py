@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # std
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Union, Tuple, TYPE_CHECKING
 
 # local
@@ -12,10 +13,20 @@ if TYPE_CHECKING:
     from .core import Session
 
 
-__all__ = ("Player",)
+__all__ = ("Player", "PlayerSummary")
 
 
 AVATAR_URL = "https://storage.prineside.com/files/i2{}/avatars/{}-128.png"
+
+
+@dataclass(frozen=True)
+class PlayerSummary:
+    """A player returned by the experimental nickname search."""
+
+    playerid: str
+    nickname: str
+    level: int
+    has_avatar: bool
 
 
 class Player:
@@ -180,7 +191,7 @@ class Player:
 
     @property
     def skill_point(self):
-        """Returns the player's daily quest score, or raises InfinitodeError if it wasn't fetched yet."""
+        """Return the skill point score; error if it has not been fetched."""
         if self._skill_point is MISSING:
             raise InfinitodeError(
                 "This score has not been fetched yet. Use ~.fetch_skill_point first."
