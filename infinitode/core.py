@@ -17,6 +17,7 @@ import aiohttp
 from bs4 import BeautifulSoup, Comment
 
 # local
+from .daily_quest import DailyQuestInfo
 from .errors import APIError, BadArgument, ParseError, PlayerNotFound
 from .leaderboard import Leaderboard
 from .player import Player, PlayerSummary
@@ -299,6 +300,39 @@ class Session:
         )
 
         return lb
+
+    async def daily_quest_info(self, *, beta: bool = False) -> DailyQuestInfo:
+        """Retrieves metadata for the currently active Daily Quest."""
+        payload = await self._post("getDailyQuestInfo", beta=beta)
+
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise ParseError("Invalid Daily Quest info response")
+
+        try:
+            date = data["date"]
+            daily_quest = data["daily_quest"]
+            end_timestamp = data["end_timestamp"]
+            data_hash = data["data_hash"]
+            if (
+                not isinstance(date, str)
+                or datetime.date.fromisoformat(date).isoformat() != date
+            ):
+                raise ValueError("invalid date")
+            if not isinstance(data_hash, str):
+                raise TypeError("invalid data hash")
+            if isinstance(daily_quest, bool) or not isinstance(daily_quest, (int, str)):
+                raise TypeError("invalid Daily Quest ID")
+            if isinstance(end_timestamp, bool) or not isinstance(
+                end_timestamp, (int, str)
+            ):
+                raise TypeError("invalid end timestamp")
+            quest_id = int(daily_quest)
+            parsed_end_timestamp = int(end_timestamp)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ParseError("Invalid Daily Quest info response") from exc
+
+        return DailyQuestInfo(date, quest_id, parsed_end_timestamp, data_hash)
 
     @async_expiring_cache()
     async def seasonal_leaderboard(self, *, beta: bool = False) -> Leaderboard:

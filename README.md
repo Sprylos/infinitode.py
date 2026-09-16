@@ -107,6 +107,15 @@ Retrieve the top 200 players of today's daily quest or a specified date.
 dq_leaderboard = await API.daily_quest_leaderboards("2024-12-05")
 ```
 
+Retrieve metadata for the currently active Daily Quest. The reset timestamp is
+also available as `reset_timestamp`, and `mapname` is derived from `quest_id`.
+
+```python
+dq = await API.daily_quest_info()
+print(dq.date, dq.quest_id, dq.mapname)
+print(dq.end_timestamp, dq.reset_timestamp, dq.data_hash)
+```
+
 ---
 
 ### Working with Leaderboards

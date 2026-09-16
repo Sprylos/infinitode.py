@@ -6,6 +6,7 @@ import aiohttp
 
 import infinitode
 from infinitode.core import Session
+from infinitode.daily_quest import DailyQuestInfo
 from infinitode.errors import APIError, BadArgument, ParseError, PlayerNotFound
 from infinitode.player import Player, PlayerSummary
 
@@ -197,6 +198,76 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         board = await Session(client).daily_quest_leaderboards("2026-9-5")
         self.assertEqual(board.date, "2026-09-05")
         self.assertEqual(client.post_calls[0][1]["date"], "2026-09-05")
+        self.assertEqual(len(client.post_calls), 1)
+
+    async def test_daily_quest_info_parsing_and_derived_properties(self):
+        payload = json.loads(fixture("daily_quest_info.json"))
+        info = await Session(
+            FakeClient([FakeResponse(payload=payload)])
+        ).daily_quest_info()
+        self.assertIsInstance(info, DailyQuestInfo)
+        self.assertEqual(info.date, "2026-09-16")
+        self.assertEqual(info.quest_id, 3)
+        self.assertIsInstance(info.quest_id, int)
+        self.assertEqual(info.end_timestamp, 1789603200)
+        self.assertIsInstance(info.end_timestamp, int)
+        self.assertEqual(info.data_hash, "7937650143b98f4fddf22bf392b9ea36")
+        self.assertEqual(info.mapname, "DQ3")
+        self.assertEqual(info.reset_timestamp, info.end_timestamp)
+        self.assertIs(infinitode.DailyQuestInfo, DailyQuestInfo)
+
+    async def test_daily_quest_info_rejects_malformed_payloads(self):
+        valid_data = json.loads(fixture("daily_quest_info.json"))["data"]
+        malformed = (None, [], "bad")
+        missing_fields = tuple(
+            {key: value for key, value in valid_data.items() if key != missing}
+            for missing in valid_data
+        )
+        invalid_fields = (
+            {**valid_data, "date": "2026-9-16"},
+            {**valid_data, "daily_quest": "not-an-int"},
+            {**valid_data, "end_timestamp": "not-an-int"},
+            {**valid_data, "data_hash": 123},
+        )
+        for data in malformed + missing_fields + invalid_fields:
+            with self.subTest(data=data), self.assertRaises(ParseError):
+                await Session(
+                    FakeClient(
+                        [FakeResponse(payload={"status": "success", "data": data})]
+                    )
+                ).daily_quest_info()
+
+    async def test_daily_quest_info_transport_api_error_and_beta(self):
+        payload = json.loads(fixture("daily_quest_info.json"))
+        beta_client = FakeClient([FakeResponse(payload=payload)])
+        await Session(beta_client).daily_quest_info(beta=True)
+        self.assertIn(
+            "https://beta.infinitode.prineside.com/", beta_client.post_calls[0][0]
+        )
+        self.assertIsNone(beta_client.post_calls[0][1])
+
+        with self.assertRaises(APIError):
+            await Session(
+                FakeClient([aiohttp.ClientConnectionError("offline")])
+            ).daily_quest_info()
+        with self.assertRaises(APIError):
+            await Session(
+                FakeClient(
+                    [FakeResponse(payload={"status": "error", "message": "nope"})]
+                )
+            ).daily_quest_info()
+
+    async def test_daily_quest_info_is_not_cached(self):
+        first = json.loads(fixture("daily_quest_info.json"))
+        second = json.loads(fixture("daily_quest_info.json"))
+        second["data"]["daily_quest"] = "4"
+        client = FakeClient(
+            [FakeResponse(payload=first), FakeResponse(payload=second)]
+        )
+        session = Session(client)
+        self.assertEqual((await session.daily_quest_info()).quest_id, 3)
+        self.assertEqual((await session.daily_quest_info()).quest_id, 4)
+        self.assertEqual(len(client.post_calls), 2)
 
     async def test_seasonal_parsing_and_malformed_html(self):
         board = await Session(

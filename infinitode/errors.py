@@ -34,6 +34,6 @@ class PlayerNotFound(BadArgument):
 
 
 class ParseError(InfinitodeError):
-    """Error raised when an HTML response cannot be parsed."""
+    """Error raised when a successful response cannot be parsed."""
 
     pass

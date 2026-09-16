@@ -7,7 +7,7 @@ An asynchronous wrapper for the Infinitode API.
 
 __author__ = "Sprylos"
 __title__ = "infinitode.py"
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 __license__ = """MIT License
 
 Copyright (c) 2026 Sprylos
@@ -32,6 +32,7 @@ SOFTWARE."""
 
 from .badge import *
 from .core import *
+from .daily_quest import *
 from .leaderboard import *
 from .player import *
 from .score import *
