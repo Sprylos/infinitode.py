@@ -217,6 +217,40 @@ updated.
 
 ---
 
+### Replay statistics
+
+`infinitode.stats` provides an independent async client for the public stats
+website. Python 3.10 or later is required.
+
+```python
+from infinitode.stats import StatsClient, ReplayQuery
+
+async def inspect_stats():
+    async with StatsClient() as stats:
+        query = ReplayQuery(report_count=10, game_modes=("BASIC_LEVELS",))
+        browser = await stats.replays(query)
+        print(browser.available_filters.maps)
+
+        aggregate = await stats.summary(query)
+        print(aggregate.statistics.general.towers_built)
+
+        replay = await stats.replay("R-RLX6-YSQL-LGNNCV")
+        print(replay.info.mapname, replay.overview.duration)
+        print(replay.statistics.towers.tower("GAUSS").damage)
+        print(replay.statistics.resources.resource("SCALAR").gained)
+
+        score = replay.statistics.score_sources
+        if score is not None:
+            for entry in score.entries:
+                print(entry.entity.key, entry.value, entry.share)
+            for timeline in score.timelines or ():
+                for point in timeline.points:
+                    print(timeline.entity.key, point.elapsed, point.value)
+
+        for issue in replay.metadata.issues:
+            print(issue.code, issue.section, issue.entity_key, issue.sample_index)
+```
+
 ### Beta Scores
 
 Almost all API calls support an additional `beta` boolean parameter. This will make a request to the beta servers instead. No guarantees for it working.

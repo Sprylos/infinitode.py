@@ -1,8 +1,0 @@
-{
-  "status": "success",
-  "player": {"total": 2, "score": 321, "rank": 2},
-  "leaderboards": [
-    {"playerid": "U-ABCD-EFGH-IJKLMN", "nickname": "Alpha", "score": 999},
-    {"playerid": "U-ZYXW-VUTS-RQPONM", "nickname": "Beta", "score": 321}
-  ]
-}
