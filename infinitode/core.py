@@ -17,10 +17,17 @@ import aiohttp
 from bs4 import BeautifulSoup, Comment
 
 # local
+from .badge import Badge
 from .daily_quest import DailyQuestInfo
 from .errors import APIError, BadArgument, ParseError, PlayerNotFound
 from .leaderboard import Leaderboard
-from .player import Player, PlayerSummary
+from .player import Player
+from .player_search import (
+    PlayerSearchEntry,
+    PlayerSearchResult,
+    PlayerSort,
+    PlayerSortOrder,
+)
 from .score import Score
 from .utils import async_expiring_cache, try_int
 
@@ -63,8 +70,10 @@ def base_url(beta: bool = False) -> str:
 
 
 class Session:
-    def __init__(self, session: Optional[aiohttp.ClientSession] = None) -> None:
+    def __init__(self, session: Optional[aiohttp.ClientSession] = None, *, cache_enabled: bool = True) -> None:
+        """Set cache_enabled=False when the caller owns caching and refresh policy."""
         self._session = session or aiohttp.ClientSession()
+        self.cache_enabled = cache_enabled
 
     # async enter and exit allow for the fancy "with" statements
     # useful so you don't have to close the session yourself
@@ -446,11 +455,23 @@ class Session:
 
     @async_expiring_cache()
     async def search_players(
-        self, query: str, *, limit: int = 20, beta: bool = False
-    ) -> list[PlayerSummary]:
-        """Searches player nicknames by case-insensitive substring match."""
-        if not isinstance(query, str) or not query.strip():
-            raise BadArgument("Search query must be a non-empty string.")
+        self,
+        nickname: str | None = None,
+        *,
+        sort_type: PlayerSort = PlayerSort.PROFILE_XP,
+        sort_order: PlayerSortOrder = PlayerSortOrder.DESC,
+        limit: int = 100,
+        beta: bool = False,
+    ) -> PlayerSearchResult:
+        """Searches and sorts players through the public player browser."""
+        if nickname is not None and (
+            not isinstance(nickname, str) or not nickname.strip()
+        ):
+            raise BadArgument("Nickname must be a non-empty string or None.")
+        if not isinstance(sort_type, PlayerSort):
+            raise BadArgument("sort_type must be a PlayerSort member.")
+        if not isinstance(sort_order, PlayerSortOrder):
+            raise BadArgument("sort_order must be a PlayerSortOrder member.")
         if (
             isinstance(limit, bool)
             or not isinstance(limit, int)
@@ -459,7 +480,12 @@ class Session:
             raise BadArgument("Search limit must be an integer from 1 through 100.")
 
         url = base_url(beta) + "xdx/index.php"
-        params = {"url": "profile/list", "nickname": query}
+        params = {
+            "url": "profile/list",
+            "nickname": nickname or "",
+            "sortType": sort_type.value,
+            "sortOrder": sort_order.value,
+        }
         LOG.info("Sending GET request to %s with params %s", url, params)
         try:
             r = await self._session.get(url=url, params=params)
@@ -469,15 +495,23 @@ class Session:
             raise APIError("Bad Gateway.") from exc
         loop = asyncio.get_running_loop()
         try:
-            results = await loop.run_in_executor(
-                None, self._parse_player_search, content
+            players, total = await loop.run_in_executor(
+                None, self._parse_player_search, content, sort_type
             )
         except Exception as exc:
             raise ParseError("Could not parse player search HTML") from exc
-        return results[:limit]
+        return PlayerSearchResult(
+            players=tuple(players[:limit]),
+            total=total,
+            sort_type=sort_type,
+            sort_order=sort_order,
+            nickname=nickname,
+        )
 
     @staticmethod
-    def _parse_player_search(content: str) -> list[PlayerSummary]:
+    def _parse_player_search(
+        content: str, sort_type: PlayerSort
+    ) -> tuple[list[PlayerSearchEntry], int]:
         data = BeautifulSoup(content, features="lxml")
         found_label = next(
             (
@@ -492,8 +526,10 @@ class Session:
         found_count = int(
             found_label.get_text(strip=True).split(":", 1)[1].replace(",", "")
         )
+        if found_count < 0:
+            raise ValueError("invalid player search result count")
 
-        results: list[PlayerSummary] = []
+        results: list[PlayerSearchEntry] = []
         for row in data.select('div[width="960"][height="64"]'):
             profile = row.select_one('label[click*="profile/view"][click*="id="]')
             level_badge = row.select_one('div[data^="player-level-badge:"]')
@@ -504,20 +540,86 @@ class Session:
             playerid = click.split("id=", 1)[1].split("&", 1)[0]
             level = int(str(level_badge["data"]).split(":", 1)[1])
             avatar_src = str(avatar["src"])
-            nickname = profile.get_text()
+            nickname = profile.get_text(strip=True)
             if ID_REGEX.fullmatch(playerid) is None or not nickname:
                 raise ValueError("invalid player search row")
+
+            pinned_badge = None
+            pinned_badge_level = None
+            pinned_badge_icon = row.select_one('img[src^="?pb-icon-"]')
+            if pinned_badge_icon is not None:
+                icon_src = str(pinned_badge_icon["src"])
+                icon_name = icon_src[len("?pb-icon-") :]
+                if not icon_name:
+                    raise ValueError("invalid pinned badge metadata")
+                if icon_name.startswith("season-level-") and icon_name.endswith(
+                    ("-2", "-3")
+                ):
+                    pinned_badge_level = icon_name[
+                        len("season-level-") :
+                    ].rsplit("-", 1)[0]
+                else:
+                    leveled_badges = (
+                        "youtube-author",
+                        "high-leveled",
+                        "season-1",
+                        "season-2",
+                    )
+                    for badge in leveled_badges:
+                        prefix = f"{badge}-"
+                        if icon_name.startswith(prefix):
+                            pinned_badge_level = icon_name[len(prefix) :]
+                            break
+                if pinned_badge_level == "":
+                    raise ValueError("invalid pinned badge metadata")
+
+                badge_container = pinned_badge_icon.parent
+                pinned_badge_overlay = badge_container.select_one(
+                    'img[src^="?pb-over-"]'
+                )
+                icon_color_value = pinned_badge_icon.get("color")
+                overlay_src = None
+                overlay_color = None
+                if pinned_badge_overlay is not None:
+                    overlay_src = str(pinned_badge_overlay["src"])[1:]
+                    overlay_color_value = pinned_badge_overlay.get("color")
+                    if overlay_color_value is not None:
+                        overlay_color = str(overlay_color_value)
+                pinned_badge = Badge(
+                    iconImg=icon_src[1:],
+                    iconColor=(
+                        str(icon_color_value)
+                        if icon_color_value is not None
+                        else None
+                    ),
+                    overlayImg=overlay_src,
+                    overlayColor=overlay_color,
+                )
+
+            sort_value = None
+            if sort_type is not PlayerSort.NICKNAME:
+                value_labels = row.select(
+                    'label[pad-left="12"][pad-right="12"]'
+                )
+                if len(value_labels) != 1:
+                    raise ValueError("missing player search sort value")
+                sort_value = value_labels[0].get_text(strip=True)
+                if not sort_value:
+                    raise ValueError("invalid player search sort value")
             results.append(
-                PlayerSummary(
+                PlayerSearchEntry(
                     playerid=playerid,
                     nickname=nickname,
                     level=level,
                     has_avatar=not avatar_src.endswith("/guest-64.png"),
+                    pinned_badge=pinned_badge,
+                    pinned_badge_level=pinned_badge_level,
+                    sort_value=sort_value,
                 )
             )
         if len(results) != min(found_count, 100):
             raise ValueError("incomplete player search results")
-        return results
+        return results, found_count
 
     @classmethod
     def _parse_player(cls, content: str, beta: bool) -> Player:
@@ -627,6 +729,7 @@ class Session:
             "skillful",
             "of-merit",
             "beta-tester-season-2",
+            "beta-tester-season-3",
             f"high-leveled-{t['level'] // 10 if t['level'] < 100 else 10}",
         ]
         rars = (

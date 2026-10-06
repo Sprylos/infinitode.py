@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # std
-from dataclasses import dataclass
 from typing import Any, Dict, Optional, Union, Tuple, TYPE_CHECKING
 
 # local
@@ -13,20 +12,10 @@ if TYPE_CHECKING:
     from .core import Session
 
 
-__all__ = ("Player", "PlayerSummary")
+__all__ = ("Player",)
 
 
 AVATAR_URL = "https://storage.prineside.com/files/i2{}/avatars/{}-128.png"
-
-
-@dataclass(frozen=True)
-class PlayerSummary:
-    """A player returned by the experimental nickname search."""
-
-    playerid: str
-    nickname: str
-    level: int
-    has_avatar: bool
 
 
 class Player:

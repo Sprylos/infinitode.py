@@ -26,6 +26,8 @@ def async_expiring_cache(seconds: int = 60) -> Any:
         cache: Dict[Tuple[Any, ...], Tuple[asyncio.Task[T], float]] = {}
 
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> asyncio.Task[T]:
+            if args and getattr(args[0], "cache_enabled", True) is False:
+                return asyncio.ensure_future(func(*args, **kwargs))
             key: Tuple[Any, ...] = (*args, *kwargs.items())  # key consists of the function arguments
             if key in cache:
                 value, timestamp = cache[key]

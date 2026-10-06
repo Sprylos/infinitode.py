@@ -33,6 +33,11 @@ async def main():
 asyncio.run(main())
 ```
 
+If your application owns caching and refresh controls, use
+`infinitode.Session(cache_enabled=False)` to bypass the library's 60-second task
+cache. The default remains enabled. The same option works with a supplied
+`aiohttp.ClientSession`.
+
 ---
 
 ### Fetching Leaderboard Data
@@ -200,20 +205,49 @@ failures raise `APIError`; unexpected changes to parsed HTML raise `ParseError`.
 
 ### Experimental features
 
-`Session.search_players()` performs an unauthenticated, case-insensitive
-substring search of player nicknames:
+`Session.search_players()` provides unauthenticated access to the player
+browser, including its case-insensitive nickname filter and sorting controls:
 
 ```python
-players = await API.search_players("eupho", limit=20)
-for result in players:
-    print(result.playerid, result.nickname, result.level, result.has_avatar)
+from infinitode import PlayerSort, PlayerSortOrder
+
+result = await API.search_players(
+    nickname="eupho",
+    sort_type=PlayerSort.PROFILE_XP,
+    sort_order=PlayerSortOrder.DESC,
+    limit=20,
+)
+print("Matching players:", result.total)
+for player in result.players:
+    print(player.playerid, player.nickname, player.level, player.sort_value)
 ```
 
-Each `PlayerSummary` contains only the verified `playerid`, `nickname`, `level`,
-and `has_avatar` fields. The upstream page returns at most 100 results and does
-not offer pagination. This feature parses an HTML page rather than a stable JSON
-API, so upstream markup changes may cause `ParseError` until the parser is
-updated.
+Omit `nickname` to browse all players. `PlayerSearchResult.total` reports the
+full number of matches while `players` contains at most `limit` entries. Each
+`PlayerSearchEntry` includes player identity, level, avatar and pinned-badge
+metadata, plus the raw displayed `sort_value`. Its `pinned_badge` is either
+`None` or the same `Badge` model used by leaderboard scores, with `icon_img`,
+`icon_color`, nullable `overlay_img`, and nullable `overlay_color` fields. The
+separate `pinned_badge_level` retains the normalized badge tier where one is
+encoded in the icon name.
+
+```text
+PlayerSearchEntry
+├── playerid, nickname, level, has_avatar
+├── pinned_badge: Badge | None
+│   ├── icon_img: str
+│   ├── icon_color: str | None
+│   ├── overlay_img: str | None
+│   └── overlay_color: str | None
+├── pinned_badge_level: str | None
+└── sort_value: str | None
+```
+
+Badge sorts return only players who own that badge. The upstream page returns
+at most 100 results and offers no pagination.
+
+This feature parses an HTML page rather than a stable JSON API, so upstream
+markup changes may cause `ParseError` until the parser is updated.
 
 ---
 

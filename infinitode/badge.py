@@ -9,7 +9,11 @@ class Badge:
     __slots__ = ("icon_img", "icon_color", "overlay_img", "overlay_color")
 
     def __init__(
-        self, iconImg: str, iconColor: str, overlayImg: str, overlayColor: str
+        self,
+        iconImg: str,
+        iconColor: str | None,
+        overlayImg: str | None,
+        overlayColor: str | None,
     ) -> None:
         self.icon_img = iconImg
         self.icon_color = iconColor
